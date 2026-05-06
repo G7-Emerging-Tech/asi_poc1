@@ -12,7 +12,7 @@ export default async function Home() {
 
   return (
     <AppShell>
-      <div className="h-full w-full flex items-center justify-center">
+      <div className="h-full w-full">
         <FleetDashboard />
       </div>
     </AppShell>

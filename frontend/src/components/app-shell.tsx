@@ -15,6 +15,7 @@ import { Separator } from "./ui/separator"
 import { Button } from "./ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar"
 import { useRouter } from "next/navigation"
+import { ModeToggle } from "./mode-toggle"
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -48,6 +49,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
 
           <div className="flex ml-auto items-center gap-2 text-xs">
+            {ModeToggle()}
             <div className="border border-red-400 text-[0.6rem] text-red-800 tracking-[0.1rem] font-semibold uppercase bg-red-100 p-1 rounded ">
               Restricted
             </div>

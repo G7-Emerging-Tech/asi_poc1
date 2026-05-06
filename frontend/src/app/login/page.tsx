@@ -40,8 +40,8 @@ export default function Login() {
                     AIIMS
                   </div>
 
-                  <div className="text-sm text-muted-foreground leading-tight">
-                    Aircraft Intelligent Integrity Mgmt System
+                  <div className="text-[10px] text-muted-foreground leading-tight">
+                    AIRCRAFT INTELLIGENT INTEGRITY MGMT SYSTEM
                   </div>
                 </div>
               </div>

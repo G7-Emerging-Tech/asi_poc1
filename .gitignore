@@ -1,0 +1,10 @@
+# Ignore a folder
+venv
+
+# Ignore all .env files
+*.env
+
+# Ignore all generated/storage files in backend
+backend/storage/**
+
+logs/**

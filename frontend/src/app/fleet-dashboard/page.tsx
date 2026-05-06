@@ -52,7 +52,7 @@ export function FleetDashboard() {
   const sortedAlerts = [...alertData].sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity]);
 
   return (
-    <div className="h-full w-full border border-red-300">
+    <div className="h-full w-full">
       <div className="text-lg font-bold">
         Fleet Dashboard
       </div>
@@ -68,7 +68,7 @@ export function FleetDashboard() {
       </div>
 
       {/* Placeholder content - replace with actual dashboard components */}
-      <div className="border border-pink-400 grid grid-cols-4 gap-2 p-2">
+      <div className="grid grid-cols-4 gap-2 p-2">
         <div className="border border-gray-300 border-t-4 border-t-blue-500 rounded-md p-2">
           <div className="text-xs uppercase text-gray-500 font-semibold">
             fleet size
@@ -293,6 +293,7 @@ function WRFLEIChart() {
 }
 
 function DefectAreaChart() {
+  const total = defectAreaData.reduce((sum, d) => sum + d.defects, 0);
   return (
     <div className="h-50 w-full bg-white text-xs">
       <ResponsiveContainer width="100%" height="100%">
@@ -304,15 +305,17 @@ function DefectAreaChart() {
             innerRadius={60}
             outerRadius={80}
             dataKey="defects"
-            label={({ payload }) => {
-              const total = defectAreaData.reduce((sum, d) => sum + d.defects, 0);
-              const percent = ((payload.defects / total) * 100).toFixed(0);
-              return `${payload.area}: ${percent}%`;
-            }}
-          />
+            nameKey="area"
+          >
           {defectAreaData.map((entry, index) => (
             <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
           ))}
+          </Pie>
+          <Tooltip formatter={(value, name, props) => {
+            const percent = ((props.payload.defects / total) * 100).toFixed(0);
+            return [`${value} defects (${percent}%)`, props.payload.area];
+          }} />
+          <Legend layout="vertical" verticalAlign="middle" align="right" />
         </PieChart>
       </ResponsiveContainer>
     </div>

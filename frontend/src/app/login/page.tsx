@@ -16,11 +16,31 @@ import {
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { useRouter } from "next/navigation"
-
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select"
 
 
 export default function Login() {
   const router = useRouter();
+  const AIRCRAFT_MODELS = [
+    "HERCULES",
+    "BEECHCRAFT",
+    "BLACKHAWK",
+    "CN235",
+    "GLOBAL",
+    "HAWK",
+    "HORNET",
+    "PC7MKII",
+    "SUKHOI",
+    "A400M",
+    "EC725 AP",
+    "FALCON",
+  ] as const
 
   return (
     <div className="flex min-h-svh flex-col items-center justify-center gap-6 bg-blue-800 p-6 md:p-10">
@@ -63,19 +83,21 @@ export default function Login() {
                       Select Aircraft Model
                     </FieldLabel>
 
-                    <select
-                      id="aircraftModel"
-                      name="aircraftModel"
-                      className="border-input bg-background flex h-10 w-full rounded-md border px-3 text-sm"
-                      defaultValue=""
-                      required
-                    >
-                      <option value="" disabled>
-                        Select aircraft model
-                      </option>
+                    <Select>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Aircraft model" />
+                      </SelectTrigger>
 
-                      <option value="admin">Admin</option>
-                    </select>
+                      <SelectContent position="popper" side="bottom" align="start" sideOffset={4}>
+                        <SelectItem value="all">All models</SelectItem>
+
+                        {AIRCRAFT_MODELS.map((model) => (
+                          <SelectItem key={model} value={model}>
+                            {model}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </Field>
                   <Field>
                     <FieldLabel htmlFor="username">Service Number/Username</FieldLabel>

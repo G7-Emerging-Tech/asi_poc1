@@ -211,8 +211,8 @@ function AFHChart() {
   const ticks = Array.from({ length: Math.ceil(maxValue / 1000) + 1}, (_, i) => i * 1000);
 
   return (
-      <div className="h-80 w-full bg-white text-xs">
-      <ResponsiveContainer width="100%" height="100%">
+      <div className="h-80 min-h-[320px] w-full bg-white text-xs">
+      <ResponsiveContainer aspect={0}>
         <BarChart
           width="100%"
           height="100%"
@@ -265,9 +265,11 @@ function WRLFEICustomTooltip({ active, payload, label }: { active?: boolean; pay
 
 function WRFLEIChart() {
   return (
-    <div className="h-50 w-full bg-white text-xs">
-      <ResponsiveContainer width="100%" height="100%">
+    <div className="h-50 min-h-[120px] w-full bg-white text-xs">
+      <ResponsiveContainer aspect={0}>
         <BarChart
+          width="100%"
+          height="100%"
           data={wrfleiData}
           margin={{ top: 10, right: 10, left: 0, bottom: 5 }}
         >
@@ -295,8 +297,8 @@ function WRFLEIChart() {
 function DefectAreaChart() {
   const total = defectAreaData.reduce((sum, d) => sum + d.defects, 0);
   return (
-    <div className="h-50 w-full bg-white text-xs">
-      <ResponsiveContainer width="100%" height="100%">
+    <div className="h-50 min-h-[120px] w-full bg-white text-xs">
+      <ResponsiveContainer aspect={0}>
         <PieChart>
           <Pie
             data={defectAreaData}

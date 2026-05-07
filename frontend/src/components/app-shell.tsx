@@ -149,7 +149,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <p className="text-xs font-medium">User Name</p>
                 <p className="text-xs text-muted-foreground">roles</p>
             </div>
-            <Button variant="outline" size="xs" className="cursor-pointer" onClick={() => router.push("/login")}>
+            <Button 
+              size="xs" 
+              className="cursor-pointer bg-red-100 text-red-600 border border-red-600 hover:bg-red-300" 
+              onClick={() => router.push("/login")}
+            >
               Sign Out
             </Button>
           </div>

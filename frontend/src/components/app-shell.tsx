@@ -29,13 +29,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const page = getActiveRoute(pathname);
-  const [open, setOpen] = useState<boolean>(true);
+  const [mounted, setMounted] = useState(false);
+  const [open, setOpen] = useState(true);
 
   useEffect(() => {
     const stored = localStorage.getItem("sidebar-open");
     if (stored !== null) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setOpen(stored === "true");
     }
+    setMounted(true);
   }, []);
 
   const handleOpenChange = (value: boolean) => {
@@ -43,9 +46,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     localStorage.setItem("sidebar-open", String(value));
   };
 
+  if (!mounted) return null;
+
   return (
     <SidebarProvider open={open} onOpenChange={handleOpenChange}>
-      <Sidebar>
+      <Sidebar className="z-20">
         <SidebarHeader className="flex flex-row items-center gap-3 bg-blue-800 text-white font-semibold max-h-20 h-full">
           <Avatar className="h-8 w-8">
             <AvatarImage src="" alt="AIIMS Logo" />
@@ -116,7 +121,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </SidebarFooter>
       </Sidebar>
 
-      <SidebarInset className="min-h-0 flex flex-col bg-background text-foreground">
+      <SidebarInset className="flex flex-col h-full w-full min-w-0 overflow-hidden bg-background text-foreground">
         <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-slate-200 bg-background px-4 backdrop-blur">
           
           <SidebarTrigger className="cursor-pointer" />
@@ -136,7 +141,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
 
           <div className="flex ml-auto items-center gap-2 text-xs">
-            {ModeToggle()}
+            <ModeToggle />
             <div className="border border-red-400 text-[0.6rem] text-red-800 tracking-[0.1rem] font-semibold uppercase bg-red-100 p-1 rounded ">
               Restricted
             </div>
@@ -159,7 +164,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </header>
         
-        <main className="flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto px-4 py-6 md:px-8 bg-background">
+        <main className="flex min-h-0 flex-1 flex-col w-full overflow-hidden px-4 py-4 bg-background">
           {children}
         </main>
         

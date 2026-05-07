@@ -123,7 +123,12 @@ export default function FleetRegister() {
                   >
                     <TableCell className="font-medium whitespace-nowrap truncate">{row.tail}</TableCell>
                     <TableCell className="whitespace-nowrap truncate">{row.afh}</TableCell>
-                    <TableCell className="whitespace-nowrap truncate">{row.deltaAnnual}</TableCell>
+                    <TableCell className="whitespace-nowrap truncate">
+                      {(() => {
+                        const { text, className } = formatAnnualDelta(row.deltaAnnual);
+                        return <span className={className}>{text}</span>;
+                      })()}
+                      </TableCell>
                     <TableCell className="whitespace-nowrap truncate">{row.wrFlei}</TableCell>
                     <TableCell className="whitespace-nowrap truncate">{row.wfFlei}</TableCell>
                     <TableCell className="whitespace-nowrap truncate">{row.lifePercent}%</TableCell>
@@ -194,4 +199,25 @@ export default function FleetRegister() {
       </div>
     </AppShell>
   )
+}
+
+function formatAnnualDelta(value: number) {
+  if (value === 0) {
+    return {
+      text: "-",
+      className: "text-muted-foreground",
+    };
+  }
+
+  if (value > 0) {
+    return {
+      text: `+${value.toFixed(2)}`,
+      className: "text-blue-600",
+    };
+  }
+
+  return {
+    text: value.toFixed(2),
+    className: "text-red-600",
+  };
 }

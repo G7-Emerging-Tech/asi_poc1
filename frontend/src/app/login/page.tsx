@@ -3,16 +3,12 @@ import { Button } from "@/components/ui/button"
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
-  CardTitle,
 } from "@/components/ui/card"
 import {
   Field,
-  FieldDescription,
   FieldGroup,
   FieldLabel,
-  FieldSeparator,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { useRouter } from "next/navigation"
@@ -23,10 +19,13 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select"
+import { useState } from "react"
 
 
 export default function Login() {
   const router = useRouter();
+  const [ loading, setLoading ] = useState(false)
+
   const AIRCRAFT_MODELS = [
     "HERCULES",
     "BEECHCRAFT",
@@ -42,6 +41,13 @@ export default function Login() {
     "FALCON",
   ] as const
 
+  async function handleSignIn() {
+    setLoading(true);
+    await new Promise((resolve) => setTimeout(resolve, 2000)); // Simulate async operation
+    setLoading(false);
+    router.push("/");
+  }
+
   return (
     <div className="flex min-h-svh flex-col items-center justify-center gap-6 bg-blue-800 py-2 px-2">
       <div className="flex w-full max-w-sm flex-col">
@@ -50,33 +56,33 @@ export default function Login() {
           <div className="p-6 ">
             <CardHeader >
 
-              <div className="flex items-start gap-3 ">
+              <div className="flex gap-3 ">
                 <div className="flex size-10 items-center justify-center rounded-md bg-blue-800 text-primary-foreground font-bold">
                   AI
                 </div>
 
-                <div className="flex flex-col">
+                <div>
                   <div className="text-xl font-semibold leading-tight">
                     AIIMS
                   </div>
 
-                  <div className="text-[10px] text-muted-foreground font-normal leading-tight tracking-wide">
-  AIRCRAFT INTELLIGENT INTEGRITY MGMT SYSTEM
-</div>
+                  <div className="flex text-[9px] text-muted-foreground font-normal items-center justify-center leading-tight tracking-wide">
+                    AIRCRAFT INTELLIGENT INTEGRITY MANAGEMENT SYSTEM
+                  </div>
                 </div>
               </div>
-
             </CardHeader>
+
             <CardContent>
               <form
                 onSubmit={(e) => {
                   e.preventDefault()
-                  router.push("/")
+                  handleSignIn()
                 }}
               >
                 <FieldGroup>
                   <div className="flex flex-col mt-4 gap-1">
-                    <span className="text-lg font-semibold">
+                    <span className="text-2xl font-semibold">
                       Secure Sign In
                     </span>
 
@@ -143,9 +149,13 @@ export default function Login() {
                   <Field>
                     <Button
                       type="submit"
-                      className="bg-blue-800 cursor-pointer"
+                      className="flex items-center gap-2 rounded-lg bg-blue-800 hover:bg-blue-500 px-4 py-2 text-white cursor-pointer"
+                      disabled={loading}
                     >
-                      Sign In to AIIMS
+                      {loading && (
+                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                      )}
+                      {loading ? "Authenticating..." : "Sign In to AIIMS"}
                     </Button>
 
                     <span className="text-muted-foreground text-center text-[9px] mt-2 mb-2">

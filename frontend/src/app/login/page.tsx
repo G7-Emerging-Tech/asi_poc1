@@ -43,14 +43,14 @@ export default function Login() {
   ] as const
 
   return (
-    <div className="flex min-h-svh flex-col items-center justify-center gap-6 bg-blue-800 p-6 md:p-10">
-      <div className="flex w-full max-w-sm flex-col gap-6">
+    <div className="flex min-h-svh flex-col items-center justify-center gap-6 bg-blue-800 py-2 px-2">
+      <div className="flex w-full max-w-sm flex-col">
 
-        <Card className="min-h-[500px] flex flex-col">
-          <div className="p-4">
+        <Card className="rounded-3xl border-0 shadow-2xl min-h-[300px] md:min-h-[650px">
+          <div className="p-6 ">
             <CardHeader >
 
-              <div className="flex items-start gap-3">
+              <div className="flex items-start gap-3 ">
                 <div className="flex size-10 items-center justify-center rounded-md bg-blue-800 text-primary-foreground font-bold">
                   AI
                 </div>
@@ -60,36 +60,47 @@ export default function Login() {
                     AIIMS
                   </div>
 
-                  <div className="text-[10px] text-muted-foreground leading-tight">
-                    AIRCRAFT INTELLIGENT INTEGRITY MGMT SYSTEM
-                  </div>
+                  <div className="text-[10px] text-muted-foreground font-normal leading-tight tracking-wide">
+  AIRCRAFT INTELLIGENT INTEGRITY MGMT SYSTEM
+</div>
                 </div>
               </div>
 
             </CardHeader>
             <CardContent>
-              <form>
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  router.push("/")
+                }}
+              >
                 <FieldGroup>
                   <div className="flex flex-col mt-4 gap-1">
-                    <span className="text-base font-semibold">
+                    <span className="text-lg font-semibold">
                       Secure Sign In
                     </span>
-                    <span className="text-muted-foreground text-sm">
-                      Select your role and authenticate with service credentials.
+
+                    <span className="text-muted-foreground text-xs">
+                      Select aircraft model and authenticate with service credentials.
                     </span>
                   </div>
+
                   <Field>
-                    <FieldLabel htmlFor="aircraftModel">
-                      Select Aircraft Model
+                    <FieldLabel htmlFor="aircraftModel" className="text-foreground/60 text-xs font-semibold">
+                      SELECT AIRCRAFT MODEL
                     </FieldLabel>
 
-                    <Select>
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Aircraft model" />
+                    <Select required>
+                      <SelectTrigger className="w-full text-xs">
+                        <SelectValue placeholder="AIRCRAFT MODEL" />
                       </SelectTrigger>
 
-                      <SelectContent position="popper" side="bottom" align="start" sideOffset={4}>
-                        <SelectItem value="all">All models</SelectItem>
+                      <SelectContent
+                        position="popper"
+                        side="bottom"
+                        align="start"
+                        sideOffset={4}
+                      >
 
                         {AIRCRAFT_MODELS.map((model) => (
                           <SelectItem key={model} value={model}>
@@ -99,31 +110,47 @@ export default function Login() {
                       </SelectContent>
                     </Select>
                   </Field>
+
                   <Field>
-                    <FieldLabel htmlFor="username">Service Number/Username</FieldLabel>
+                    <FieldLabel htmlFor="username" className="text-foreground/60 text-xs font-semibold">
+                      SERVICE NUMBER / USERNAME
+                    </FieldLabel>
+
                     <Input
                       id="username"
-                      type="username"
+                      type="text"
+                      className="text-xs"
                       placeholder="e.g. SVC-20440123"
                       required
                     />
                   </Field>
+
                   <Field>
                     <div className="flex items-center">
-                      <FieldLabel htmlFor="password">Password</FieldLabel>
-
+                      <FieldLabel htmlFor="password" className="text-foreground/60 text-xs font-semibold">
+                        PASSWORD
+                      </FieldLabel>
                     </div>
-                    <Input id="password" type="password" placeholder="••••••••" required />
+
+                    <Input
+                      id="password"
+                      type="password"
+                      placeholder="••••••••"
+                      required
+                    />
                   </Field>
+
                   <Field>
                     <Button
-                      type="button"
+                      type="submit"
                       className="bg-blue-800 cursor-pointer"
-                      onClick={() => router.push("/")}
                     >
                       Sign In to AIIMS
                     </Button>
-                    <span className="text-muted-foreground text-center text-[10px] mt-2">RESTRICTED SYSTEM · AUTHORISED USERS ONLY · ALL ACTIVITY LOGGED</span>
+
+                    <span className="text-muted-foreground text-center text-[9px] mt-2 mb-2">
+                      RESTRICTED SYSTEM · AUTHORISED USERS ONLY · ALL ACTIVITY LOGGED
+                    </span>
                   </Field>
                 </FieldGroup>
               </form>

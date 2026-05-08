@@ -24,6 +24,7 @@ type FleetRow = {
   status: "operational" | "maintenance";
 };
 
+{/* Dummy data for demonstration purposes, replace with actual data api*/}
 const dummyData: FleetRow[] = [
   {
     tail: "AC-01",
@@ -89,8 +90,17 @@ export default function FleetRegister() {
           <div className="text-lg font-bold">
             Fleet Register - FLEI & AFH
           </div>
+          
+          {lpm12yTails.length > 0 && (
+              <div className="ml-auto flex items-center gap-2 px-2 text-xs font-medium text-blue-600">
+                <span>★</span>
+                <span>
+                  {lpm12yTails.join(" · ")} have LPM12Y data
+                </span>
+              </div>
+            )}
 
-          <div className="flex text-sm ml-auto gap-1">
+          <div className="flex text-sm gap-1">
             <Button size="xs" className="bg-blue-600 hover:bg-blue-800 cursor-pointer">
               <Plus className="h-4 w-4"/> Add Aircraft
             </Button>
@@ -326,3 +336,7 @@ function getDefectsTextClass(value: number) {
 
   return "text-foreground"; // default black
 }
+
+const lpm12yTails = dummyData
+  .filter(item => item.lpm12y)
+  .map(item => item.tail);

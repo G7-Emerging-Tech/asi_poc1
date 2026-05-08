@@ -1,6 +1,6 @@
 import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
-import { FleetDashboard } from "./fleet-dashboard/page"
+import FleetDashboard from "./fleet-dashboard/page"
 import { AppShell } from "@/components/app-shell"
 
 export default async function Home() {

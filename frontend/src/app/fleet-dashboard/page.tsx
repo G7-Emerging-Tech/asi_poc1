@@ -47,7 +47,7 @@ const defectAreaData = [
   { area: "Centre Fuselage", defects: 6 },
 ]
 
-export function FleetDashboard() {
+export default function FleetDashboard() {
   const severityOrder: Record<string, number> = { High: 1, Medium: 2, Low: 3 };
   const sortedAlerts = [...alertData].sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity]);
 

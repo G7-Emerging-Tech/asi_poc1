@@ -3,8 +3,11 @@
 import { AppShell } from "@/components/app-shell"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Field, FieldLabel } from "@/components/ui/field";
+import { Progress } from "@/components/ui/progress";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus } from "lucide-react"
+import { cn } from "@/lib/utils";
+import { Check, Plus } from "lucide-react"
 import { useState } from "react";
 
 type FleetRow = {
@@ -101,15 +104,15 @@ export default function FleetRegister() {
                 <TableRow>
                   <TableHead className="whitespace-nowrap truncate">Tail</TableHead>
                   <TableHead className="whitespace-nowrap truncate">AFH</TableHead>
-                  <TableHead className="whitespace-nowrap truncate">Δ Annual AFH</TableHead>
+                  <TableHead className="whitespace-nowrap truncate w-24">Δ Annual AFH</TableHead>
                   <TableHead className="whitespace-nowrap truncate">WR FLEI</TableHead>
                   <TableHead className="whitespace-nowrap truncate">WF FLEI</TableHead>
-                  <TableHead className="whitespace-nowrap truncate">Life %</TableHead>
-                  <TableHead className="whitespace-nowrap truncate">Total Defects</TableHead>
+                  <TableHead className="whitespace-nowrap truncate w-30">Life %</TableHead>
+                  <TableHead className="whitespace-nowrap truncate w-22">Total Defects</TableHead>
                   <TableHead className="whitespace-nowrap truncate">Δ Latest AFH</TableHead>
                   <TableHead className="whitespace-nowrap truncate">Correlation</TableHead>
-                  <TableHead className="whitespace-nowrap truncate">LPM 12y</TableHead>
-                  <TableHead className="whitespace-nowrap truncate">Status</TableHead>
+                  <TableHead className="whitespace-nowrap truncate w-20">LPM 12y</TableHead>
+                  <TableHead className="whitespace-nowrap truncate w-28">Status</TableHead>
                   <TableHead className="whitespace-nowrap truncate"/>
                 </TableRow>
               </TableHeader>
@@ -118,10 +121,23 @@ export default function FleetRegister() {
                 {dummyData.map((row) => (
                   <TableRow
                     key={row.tail}
-                    className="cursor-pointer text-xs hover:bg-muted/50"
+                    className={cn(
+                      "cursor-pointer text-xs hover:bg-muted/50 transition-colors",
+                      row.lpm12y && "bg-blue-50 hover:bg-gray-200"
+                    )}
                     onClick={() => setSelectedRow(row)}
                   >
-                    <TableCell className="font-medium whitespace-nowrap truncate">{row.tail}</TableCell>
+                    <TableCell className="font-medium whitespace-nowrap truncate">
+                      <div className="flex flex-col">
+                        <span>{row.tail}</span>
+                        {row.lpm12y && (
+                          <span className="inline flex w-fit items-center rounded-md border border-blue-400 bg-blue-100
+                          px-0.5 py-0.5 text-[9px] font-semibold text-blue-700">
+                            LPM12Y
+                          </span>
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell className="whitespace-nowrap truncate">{row.afh}</TableCell>
                     <TableCell className="whitespace-nowrap truncate">
                       {(() => {
@@ -129,15 +145,59 @@ export default function FleetRegister() {
                         return <span className={className}>{text}</span>;
                       })()}
                       </TableCell>
-                    <TableCell className="whitespace-nowrap truncate">{row.wrFlei}</TableCell>
-                    <TableCell className="whitespace-nowrap truncate">{row.wfFlei}</TableCell>
-                    <TableCell className="whitespace-nowrap truncate">{row.lifePercent}%</TableCell>
-                    <TableCell className="whitespace-nowrap truncate">{row.defectsTotal}</TableCell>
+                    <TableCell className="whitespace-nowrap truncate">         
+                      <span
+                        className={`inline-block px-2 py-0.5 font-medium ${getWrFleiClass(row.wrFlei)}`}
+                      >
+                        {row.wrFlei.toFixed(3)}
+                      </span>
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap truncate">
+                      <span
+                        className={`inline-block px-2 py-0.5 ${getWfFleiClass(row.wfFlei)}`}
+                      >
+                        {row.wfFlei.toFixed(3)}
+                      </span>
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap truncate">
+                      {(() => {
+                        const { bar, text } = getLifeStyles(row.lifePercent);
+
+                        return (
+                          <Field className="w-full">
+                            <FieldLabel className="text-[10px] leading-none">
+                              <span className={`ml-auto font-medium ${text}`}>
+                                {row.lifePercent}%
+                              </span>
+                            </FieldLabel>
+
+                            <Progress
+                              value={row.lifePercent}
+                              className="h-2 bg-muted"
+                              indicatorClassName={bar}
+                            />
+                          </Field>
+                        );
+                      })()}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap truncate">
+                      <span className={`font-medium ${getDefectsTextClass(row.defectsTotal)}`}>
+                        {row.defectsTotal}
+                      </span>
+                    </TableCell>
                     <TableCell className="whitespace-nowrap truncate">{row.deltaLatest}</TableCell>
                     <TableCell className="whitespace-nowrap truncate">{row.corr}</TableCell>
-                    <TableCell className="whitespace-nowrap truncate">{row.lpm12y ? "Yes" : "No"}</TableCell>
-
                     <TableCell className="whitespace-nowrap truncate">
+                      {row.lpm12y ? (
+                        <span className="inline-flex items-center gap-1 rounded-md bg-green-100 px-2 py-0.5 text-xs text-green-800 border border-green-300">
+                          <Check className="h-3 w-3"/>Done
+                        </span>
+                      ) : (
+                       <span className="text-muted-foreground">-</span>
+                      )}
+                    </TableCell>    
+
+                    <TableCell className=" whitespace-nowrap truncate">
                       <span
                         className={`rounded px-2 py-0.5 text-xs font-semibold ${
                           row.status === "operational"
@@ -220,4 +280,49 @@ function formatAnnualDelta(value: number) {
     text: value.toFixed(2),
     className: "text-red-600",
   };
+}
+
+function getLifeStyles(value: number) {
+  if (value < 70) {
+    return {
+      bar: "bg-green-600",
+      text: "text-green-700",
+    };
+  }
+
+  if (value < 90) {
+    return {
+      bar: "bg-yellow-500",
+      text: "text-yellow-700",
+    };
+  }
+
+  return {
+    bar: "bg-red-600",
+    text: "text-red-700",
+  };
+}
+
+function getWrFleiClass(value: number) {
+  return value >= 0.4
+    ? "text-yellow-700"
+    : "text-green-700";
+}
+
+function getWfFleiClass(value: number) {
+  return value >= 0.2
+    ? "text-yellow-700"
+    : "text-green-700";
+}
+
+function getDefectsTextClass(value: number) {
+  if (value >= 70) {
+    return "text-red-600";
+  }
+
+  if (value >= 40) {
+    return "text-yellow-600";
+  }
+
+  return "text-foreground"; // default black
 }

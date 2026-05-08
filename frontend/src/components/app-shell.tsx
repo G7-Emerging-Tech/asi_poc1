@@ -3,6 +3,7 @@
 import {
   Sidebar,
   SidebarContent,
+  SidebarGroupLabel,
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
@@ -26,6 +27,17 @@ import { getActiveRoute, SIDEBAR_NAV } from "@/lib/route"
 import { useEffect, useState } from "react"
 
 export function AppShell({ children }: { children: React.ReactNode }) {
+  type NavItem = {
+    label: string
+    href: string
+    badge?: string
+    badgeColor?: string
+    icon?: React.ComponentType<{ className?: string }>
+  }
+  type NavGroup = {
+    label: string
+    items: NavItem[]
+  }
   const router = useRouter();
   const pathname = usePathname();
   const page = getActiveRoute(pathname);
@@ -151,8 +163,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <AvatarImage src="" alt="User" />
                 <AvatarFallback className="rounded-lg bg-green-700 text-white">UR</AvatarFallback>
               </Avatar>
-                <p className="text-xs font-medium">User Name</p>
-                <p className="text-xs text-muted-foreground">roles</p>
+              <p className="text-xs font-medium">User Name</p>
+              <p className="text-xs text-muted-foreground">roles</p>
             </div>
             <Button 
               size="xs" 
@@ -167,7 +179,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <main className="flex min-h-0 flex-1 flex-col w-full overflow-hidden px-4 py-4 bg-background">
           {children}
         </main>
-        
+
       </SidebarInset>
     </SidebarProvider>
   )

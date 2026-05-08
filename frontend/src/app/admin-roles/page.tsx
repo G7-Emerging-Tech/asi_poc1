@@ -115,17 +115,31 @@ export default function AdminRoles() {
                                         <td className="p-3 text-center text-green-600 font-bold">✓</td>
                                         <td className="p-3 text-center text-green-600 font-bold">✓</td>
                                         <td className="p-3 text-center text-green-600 font-bold">✓</td>
-                                        <td className="p-3 text-center text-center text-gray-400 font-bold">—</td>                                        <td className="p-3 text-green-600 font-bold">✓</td>
+                                        <td className="p-3 text-center text-center text-gray-400 font-bold">—</td>                                        
+                                        <td className="p-3 text-green-600 font-bold">✓</td>
                                         <td className="p-3 text-center text-green-600 font-bold">✓</td>
                                     </tr>
 
                                     <tr className="border-t font-bold text-[10px]">
                                         <td className="p-3">Analyst</td>
                                         <td className="p-3 text-center text-green-600 font-bold">✓</td>
-                                        <td className="p-3 text-center text-center text-gray-400 font-bold">—</td>                                        <td className="p-3 text-green-600 font-bold">✓</td>
-                                        <td className="p-3 text-center text-center text-gray-400 font-bold">—</td>                                        <td className="p-3 text-green-600 font-bold">✓</td>
-                                        <td className="p-3 text-center text-center text-gray-400 font-bold">—</td>                                        <td className="p-3 text-green-600 font-bold">✓</td>
+                                        <td className="p-3 text-center text-center text-gray-400 font-bold">—</td>                                        
+                                        <td className="p-3 text-center text-green-600 font-bold">✓</td>
+                                        <td className="p-3  text-center text-gray-400 font-bold">—</td>                                        
+                                        <td className="p-3 text-center text-green-600 font-bold">✓</td>
+                                        <td className="p-3 text-center text-green-600 font-bold">✓</td>
                                     </tr>
+
+                                    <tr className="border-t font-bold text-[10px]">
+                                        <td className="p-3">Auditor</td>
+                                        <td className="p-3 text-center text-gray-400 font-bold">—</td>                                        
+                                        <td className="p-3 text-center text-gray-400 font-bold">—</td>                                        
+                                        <td className="p-3 text-center text-gray-400 font-bold">—</td>                                        
+                                        <td className="p-3 text-center  text-gray-400 font-bold">—</td>                                        
+                                        <td className="p-3 text-center text-gray-400 font-bold">—</td>                                        
+                                        <td className="p-3 text-green-600 font-bold">✓</td>
+                                    </tr>
+
 
                                 </tbody>
 

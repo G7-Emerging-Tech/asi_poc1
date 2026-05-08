@@ -61,8 +61,8 @@ export default function Login() {
                   </div>
 
                   <div className="text-[10px] text-muted-foreground font-normal leading-tight tracking-wide">
-  AIRCRAFT INTELLIGENT INTEGRITY MGMT SYSTEM
-</div>
+                    AIRCRAFT INTELLIGENT INTEGRITY MGMT SYSTEM
+                  </div>
                 </div>
               </div>
 

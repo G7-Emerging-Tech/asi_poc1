@@ -199,7 +199,7 @@ export default function FleetRegister() {
                     <TableCell className="whitespace-nowrap truncate">{row.corr}</TableCell>
                     <TableCell className="whitespace-nowrap truncate">
                       {row.lpm12y ? (
-                        <span className="inline-flex items-center gap-1 rounded-md bg-green-100 px-2 py-0.5 text-xs text-green-800 border border-green-300">
+                        <span className="inline-flex items-center rounded-md bg-green-100 gap-1 px-1 py-0.5 text-xs text-green-800 border border-green-300">
                           <Check className="h-3 w-3"/>Done
                         </span>
                       ) : (

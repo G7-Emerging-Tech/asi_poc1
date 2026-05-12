@@ -9,6 +9,7 @@ import {
   SidebarHeader,
   SidebarInset,
   SidebarMenu,
+  SidebarGroupLabel,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarProvider,

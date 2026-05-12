@@ -3,6 +3,14 @@
 import { AppShell } from "@/components/app-shell"
 import { useState } from "react"
 import { Pencil, Eye, EyeOff } from "lucide-react"
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from "@/components/ui/table"
 
 const roles = [
     {
@@ -180,37 +188,40 @@ export default function AdminRoles() {
                     <div className="w-7/10 lg:w-1/2 flex flex-col gap-4 min-w-0">
                         {/* Top table */}
                         <div className="overflow-hidden rounded-lg border border-gray-200 shadow-sm">
-                            <table className="w-full text-xs">
-                                <thead className="bg-gray-100 dark:bg-gray-800 text-left text-[10px] text-muted-foreground">
-                                    <tr>
-                                        <th className="p-2">USER</th>
-                                        <th className="p-2">ROLE</th>
-                                        <th className="p-2">PERMISSION</th>
-                                    </tr>
-                                </thead>
+                            <Table className="border rounded-lg overflow-hidden">
+                                <TableHeader className="bg-muted">
+                                    <TableRow>
+                                        <TableHead className="text-[10px] text-muted-foreground font-semibold">USER</TableHead>
+                                        <TableHead className="text-[10px] text-muted-foreground font-semibold">ROLE</TableHead>
+                                        <TableHead className="text-[10px] text-muted-foreground font-semibold">PERMISSION</TableHead>
+                                    </TableRow>
+                                </TableHeader>
 
-                                <tbody>
+                                <TableBody>
                                     {roles.map((item) => (
-                                        <tr key={item.user} className="border-t">
-                                            <td className="p-3 font-bold">
+                                        <TableRow
+                                            key={item.user}
+                                            className="hover:bg-muted/50 transition"
+                                        >
+                                            <TableCell className="font-semibold text-xs">
                                                 {item.user}
-                                            </td>
+                                            </TableCell>
 
-                                            <td className="p-1">
+                                            <TableCell>
                                                 <span
-                                                    className={`text-[0.7rem] font-semibold px-2 py-0.5 rounded ${item.roleStyle}`}
+                                                    className={`text-[11px] font-semibold px-2 py-1 rounded-md border ${item.roleStyle}`}
                                                 >
                                                     {item.role}
                                                 </span>
-                                            </td>
+                                            </TableCell>
 
-                                            <td className="p-3">
+                                            <TableCell className="text-xs text-muted-foreground">
                                                 {item.permission}
-                                            </td>
-                                        </tr>
+                                            </TableCell>
+                                        </TableRow>
                                     ))}
-                                </tbody>
-                            </table>
+                                </TableBody>
+                            </Table>
                         </div>
 
                         {/* Bottom table */}
@@ -218,50 +229,44 @@ export default function AdminRoles() {
                             <p className="p-2 text-xs font-bold text-gray-500">
                                 RBAC PERMISSION MATRIX
                             </p>
+                            <Table className="border rounded-lg overflow-hidden">
+                                <TableHeader className="bg-muted border-b-2">
+                                    <TableRow>
+                                        <TableHead className="text-[10px] text-muted-foreground font-semibold">ROLE</TableHead>
+                                        <TableHead className="text-[10px] text-muted-foreground font-semibold text-center">CREATE</TableHead>
+                                        <TableHead className="text-[10px] text-muted-foreground font-semibold text-center">EDIT</TableHead>
+                                        <TableHead className="text-[10px] text-muted-foreground font-semibold text-center">VERIFY</TableHead>
+                                        <TableHead className="text-[10px] text-muted-foreground font-semibold text-center">APPROVE</TableHead>
+                                        <TableHead className="text-[10px] text-muted-foreground font-semibold text-center">EXPORT</TableHead>
+                                        <TableHead className="text-[10px] text-muted-foreground font-semibold text-center">DEVS</TableHead>
+                                    </TableRow>
+                                </TableHeader>
 
-                            <table className="w-full text-[10px]">
-                                <thead className="bg-gray-100 dark:bg-gray-800 text-left text-muted-foreground border-b-2 border-gray-300">
-                                    <tr>
-                                        <th className="p-1">ROLE</th>
-                                        <th className="p-1">CREATE</th>
-                                        <th className="p-1">EDIT</th>
-                                        <th className="p-1">VERIFY</th>
-                                        <th className="p-1">APPROVE</th>
-                                        <th className="p-1">EXPORT</th>
-                                        <th className="p-1">DEVS</th>
-                                    </tr>
-                                </thead>
-
-                                <tbody>
+                                <TableBody>
                                     {permissionMatrix.map((item) => (
-                                        <tr
+                                        <TableRow
                                             key={item.role}
-                                            className="border-t font-bold text-xs"
+                                            className="hover:bg-muted/50 transition"
                                         >
-                                            <td className="p-3">{item.role}</td>
+                                            <TableCell className="font-semibold text-xs">
+                                                {item.role}
+                                            </TableCell>
 
-                                            {[
-                                                item.create,
-                                                item.edit,
-                                                item.verify,
-                                                item.approve,
-                                                item.export,
-                                                item.devs,
-                                            ].map((value, index) => (
-                                                <td
-                                                    key={index}
-                                                    className={`p-3 text-center font-bold ${value
-                                                        ? "text-green-600"
-                                                        : "text-gray-400"
-                                                        }`}
-                                                >
-                                                    {value ? "✓" : "—"}
-                                                </td>
-                                            ))}
-                                        </tr>
+                                            {[item.create, item.edit, item.verify, item.approve, item.export, item.devs].map(
+                                                (value, i) => (
+                                                    <TableCell key={i} className="text-center text-xs font-semibold">
+                                                        {value ? (
+                                                            <span className="text-green-600">✓</span>
+                                                        ) : (
+                                                            <span className="text-muted-foreground">—</span>
+                                                        )}
+                                                    </TableCell>
+                                                )
+                                            )}
+                                        </TableRow>
                                     ))}
-                                </tbody>
-                            </table>
+                                </TableBody>
+                            </Table>
                         </div>
                     </div>
 

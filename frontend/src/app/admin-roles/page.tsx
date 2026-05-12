@@ -11,6 +11,9 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Card } from "@/components/ui/card"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 
 const roles = [
     {
@@ -359,75 +362,70 @@ export default function AdminRoles() {
                             u.email.toLowerCase().includes(search.toLowerCase())
                         )
                         .map(user => (
-                            <div
-                                key={user.id}
-                                className="relative flex items-start justify-between gap-4 p-3 border bg-white dark:bg-gray-900"
-                            >
+                            <Card key={user.id} className="p-3 flex items-start justify-between gap-4 relative rounded-none">
 
+                                {/* LEFT SIDE */}
                                 <div className="flex items-start gap-3">
 
-                                    <input
-                                        type="checkbox"
+                                    <Checkbox
                                         checked={selected.includes(user.id)}
-                                        onChange={(e) => {
-                                            if (e.target.checked) {
+                                        onCheckedChange={(checked) => {
+                                            if (checked) {
                                                 setSelected([...selected, user.id])
                                             } else {
                                                 setSelected(selected.filter(id => id !== user.id))
                                             }
                                         }}
-                                        className="mt-2"
                                     />
 
                                     {/* AVATAR */}
-                                    <div className="size-9 rounded-full bg-gray-300 flex items-center justify-center font-bold text-xs">
-                                        {user.name.charAt(0)}
-                                    </div>
+                                    <Avatar className="h-9 w-9">
+                                        <AvatarFallback className="text-xs font-bold">
+                                            {user.name.charAt(0)}
+                                        </AvatarFallback>
+                                    </Avatar>
 
+                                    {/* INFO */}
                                     <div className="flex flex-col gap-1">
 
-                                        {/* STATUS */}
                                         <span className="text-[10px] px-2 py-0.5 w-fit rounded-full bg-green-100 text-green-700 border border-green-300">
                                             Active
                                         </span>
 
-                                        {/* USERNAME */}
                                         <span className="font-semibold text-xs">
                                             {user.name}
                                         </span>
 
-                                        {/* ROLE */}
                                         <span className="text-[10px] text-gray-500">
                                             Role: {user.role}
                                         </span>
 
-                                        {/* PASSWORD (dummy display) */}
                                         <span className="text-[10px] text-gray-400">
                                             Password: ********
                                         </span>
+
                                     </div>
                                 </div>
 
+                                {/* EDIT BUTTON */}
                                 <button
                                     onClick={() => {
                                         setEditId(user.id)
-
                                         setForm({
                                             name: user.name,
                                             role: user.role,
                                             password: "",
                                             avatar: user.avatar || "",
                                         })
-
                                         setOpen(true)
                                     }}
                                     className="absolute top-2 right-2 p-1 text-blue-600 hover:bg-blue-100 rounded-md"
                                 >
                                     <Pencil className="w-3.5 h-3.5" />
                                 </button>
-                            </div>
-                        ))
-                    }
+
+                            </Card>
+                        ))}
 
                 </div>
             </div>

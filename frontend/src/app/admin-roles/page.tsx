@@ -466,7 +466,7 @@ export default function AdminRoles() {
                                     )}
                                 </div>
 
-                                <label className="text-[10px] px-2 py-1 bg-gray-100 border rounded-md cursor-pointer hover:bg-gray-200">
+                                <label className="text-[10px] px-2 py-1 bg-gray-100 text-black border rounded-md cursor-pointer hover:bg-gray-200">
                                     Upload
                                     <input
                                         type="file"

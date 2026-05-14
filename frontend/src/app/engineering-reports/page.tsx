@@ -21,7 +21,7 @@ export default function EngineeringReports() {
     reference: string
     title: string
     type: string
-    status: string
+    status: "Submitted" | "Reviewed" | "Approved" | "Accepted"
     date: string
   
     report: {
@@ -84,7 +84,7 @@ export default function EngineeringReports() {
       reference: "F-A-18D/ASI/YER",
       title: "F/A-18D Annual Structural Integrity Report",
       type: "Annual",
-      status: "Approved",
+      status: "Submitted",
       date: "Jan 2024",
 
       report: {

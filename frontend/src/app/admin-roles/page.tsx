@@ -14,41 +14,41 @@ import {
 import { Checkbox } from "@/components/ui/checkbox"
 import { Card } from "@/components/ui/card"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Input } from "@/components/ui/input"
+import { Button } from "@/components/ui/button"
+import { Label } from "@/components/ui/label"
+import {
+    Select,
+    SelectTrigger,
+    SelectValue,
+    SelectContent,
+    SelectItem,
+} from "@/components/ui/select"
 
 const roles = [
     {
         user: "ASI Manager",
         role: "ASI Manager",
-        roleStyle:
-            "text-red-800 bg-red-100 border border-red-400",
         permission: "Full All permissions",
     },
     {
         user: "ASI/ESI Engineer",
         role: "ASI/ESI Engineer",
-        roleStyle:
-            "text-blue-800 bg-blue-100 border border-blue-400",
         permission: "Create · Edit · Verify · Upload",
     },
     {
         user: "Analyst",
         role: "Analyst",
-        roleStyle:
-            "text-green-800 bg-green-100 border border-green-400",
         permission: "Create · Upload · View",
     },
     {
         user: "Auditor",
         role: "Auditor",
-        roleStyle:
-            "text-purple-800 bg-purple-100 border border-purple-400",
         permission: "View · Export only",
     },
     {
         user: "Admin",
         role: "Admin",
-        roleStyle:
-            "text-yellow-800 bg-yellow-100 border border-yellow-400",
         permission: "Overwrite · All Permission",
     },
 ]
@@ -91,49 +91,38 @@ const permissionMatrix = [
         devs: true,
     },
 ]
+
 const systemStatus = [
     {
         title: "System",
         status: "Online",
-        boxColor: "bg-green-100 border-green-300",
-        dotColor: "bg-green-500",
     },
     {
         title: "AI Assistant",
         status: "Active",
-        boxColor: "bg-green-100 border-green-300",
-        dotColor: "bg-green-500",
     },
     {
         title: "Document Index",
         status: "5 documents indexed",
-        boxColor: "bg-green-100 border-green-300",
-        dotColor: "bg-green-500",
     },
     {
         title: "Classification",
         status: "RESTRICTED",
-        boxColor: "bg-red-100 border-red-300",
-        dotColor: "bg-red-500",
     },
     {
         title: "Network",
         status: "Secure / On-premises",
-        boxColor: "bg-blue-100 border-blue-300",
-        dotColor: "bg-blue-500",
     },
     {
         title: "Last Sync",
         status: "Up to date",
-        boxColor: "bg-green-100 border-green-300",
-        dotColor: "bg-green-500",
     },
 ]
 
 const dummyUsers = [
-    { id: 1, name: "John Doe", email: "john@company.com", role: "Analyst" },
+    { id: 1, name: "John Doe", email: "john@company.com", role: "Analyst", aircraft: "SUKHOI" },
     { id: 2, name: "Sarah Lee", email: "sarah@company.com", role: "Auditor" },
-    { id: 3, name: "Mike Tan", email: "mike@company.com", role: "ASI/ESI Engineer" },
+    { id: 3, name: "Mike Tan", email: "mike@company.com", role: "ASI/ESI Engineer", aircraft: "HERCULES" },
 ]
 const roleOptions = [
     "ASI Manager",
@@ -150,6 +139,7 @@ type User = {
     role: string
     password?: string
     avatar?: string
+    aircraft?: string
 }
 export default function AdminRoles() {
 
@@ -166,7 +156,25 @@ export default function AdminRoles() {
         role: "",
         password: "",
         avatar: "",
+        aircraft: "",
     })
+    const aircraftOptions = [
+        "HERCULES",
+        "BEECHCRAFT",
+        "BLACKHAWK",
+        "CN235",
+        "GLOBAL",
+        "HAWK",
+        "HORNET",
+        "PC7MKII",
+        "SUKHOI",
+        "A400M",
+    ]
+    const roleNeedsAircraft = [
+        "Analyst",
+        "ASI/ESI Engineer",
+    ]
+
     return (
         <AppShell>
             <div className="p-6 space-y-4">
@@ -212,8 +220,7 @@ export default function AdminRoles() {
 
                                             <TableCell>
                                                 <span
-                                                    className={`text-[11px] font-semibold px-2 py-1 rounded-md border ${item.roleStyle}`}
-                                                >
+                                                    className={`text-[11px] font-semibold px-2 py-1 rounded-md border ${getRoleStyle(item.role)}`}                                                >
                                                     {item.role}
                                                 </span>
                                             </TableCell>
@@ -294,10 +301,10 @@ export default function AdminRoles() {
                                     </div>
 
                                     <div
-                                        className={`p-2 rounded-sm border ${item.boxColor}`}
+                                        className={`p-2 rounded-sm border ${getSystemBoxColor(item.title)}`}
                                     >
                                         <div
-                                            className={`size-1 rounded-full ${item.dotColor}`}
+                                            className={`size-1 rounded-full ${getSystemDotColor(item.title)}`}
                                         />
                                     </div>
                                 </div>
@@ -329,7 +336,7 @@ export default function AdminRoles() {
                                 className="text-xs px-3 py-1 bg-blue-600 text-white rounded-md"
                                 onClick={() => {
                                     setEditId(null)
-                                    setForm({ name: "", role: "", password: "", avatar: "" })
+                                    setForm({ name: "", role: "", password: "", avatar: "", aircraft: "" })
                                     setOpen(true)
                                 }}                            >
                                 + Add User
@@ -403,6 +410,11 @@ export default function AdminRoles() {
                                         <span className="text-[10px] text-gray-400">
                                             Password: ********
                                         </span>
+                                        {roleNeedsAircraft.includes(user.role) && (
+                                            <span className="text-[10px] text-gray-500">
+                                                Aircraft: {user.aircraft}
+                                            </span>
+                                        )}
 
                                     </div>
                                 </div>
@@ -416,6 +428,7 @@ export default function AdminRoles() {
                                             role: user.role,
                                             password: "",
                                             avatar: user.avatar || "",
+                                            aircraft: user.aircraft || "",
                                         })
                                         setOpen(true)
                                     }}
@@ -489,41 +502,78 @@ export default function AdminRoles() {
                                 </label>
                             </div>
 
-                            {/* INPUT STACK */}
                             <div className="flex flex-col gap-2 flex-1">
 
                                 {/* USERNAME */}
-                                <input
-                                    placeholder="Username"
-                                    className="text-xs p-2 border rounded-md"
-                                    value={form.name}
-                                    onChange={(e) =>
-                                        setForm({ ...form, name: e.target.value })
-                                    }
-                                />
+                                <div className="space-y-1">
+                                    <Label className="text-xs">Username</Label>
+                                    <Input
+                                        placeholder="Username"
+                                        className="text-xs"
+                                        value={form.name}
+                                        onChange={(e) =>
+                                            setForm({ ...form, name: e.target.value })
+                                        }
+                                    />
+                                </div>
 
                                 {/* ROLE */}
-                                <select
-                                    className="text-xs p-2 border rounded-md bg-white dark:bg-gray-900"
-                                    value={form.role}
-                                    onChange={(e) =>
-                                        setForm({ ...form, role: e.target.value })
-                                    }
-                                >
-                                    <option value="">Select Role</option>
-                                    {roleOptions.map((role) => (
-                                        <option key={role} value={role}>
-                                            {role}
-                                        </option>
-                                    ))}
-                                </select>
+                                <div className="space-y-1">
+                                    <Label className="text-xs">Role</Label>
+
+                                    <Select
+                                        value={form.role}
+                                        onValueChange={(value) =>
+                                            setForm({ ...form, role: value })
+                                        }
+                                    >
+                                        <SelectTrigger className="w-full text-xs">
+                                            <SelectValue placeholder="Select Role" />
+                                        </SelectTrigger>
+
+                                        <SelectContent>
+                                            {roleOptions.map((role) => (
+                                                <SelectItem key={role} value={role}>
+                                                    {role}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
+                                {/* AIRCRAFT - Only show for Analyst and ASI/ESI Engineer */}
+                                {roleNeedsAircraft.includes(form.role) && (
+                                    <div className="space-y-1">
+                                        <Label className="text-xs">Aircraft</Label>
+                                        <Select
+                                            value={form.aircraft}
+                                            onValueChange={(value) =>
+                                                setForm({ ...form, aircraft: value })
+                                            }
+                                        >
+                                            <SelectTrigger className="w-full text-xs">
+                                                <SelectValue placeholder="Select Aircraft" />
+                                            </SelectTrigger>
+
+                                            <SelectContent>
+                                                {aircraftOptions.map((aircraft) => (
+                                                    <SelectItem key={aircraft} value={aircraft}>
+                                                        {aircraft}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                )}
 
                                 {/* PASSWORD */}
-                                <div className="relative">
-                                    <input
+                                <div className="space-y-1 relative">
+                                    <Label className="text-xs">Password</Label>
+
+                                    <Input
                                         placeholder="Password"
                                         type={showPassword ? "text" : "password"}
-                                        className="text-xs p-2 border rounded-md w-full pr-8"
+                                        className="text-xs pr-8"
                                         value={form.password}
                                         onChange={(e) =>
                                             setForm({ ...form, password: e.target.value })
@@ -533,7 +583,7 @@ export default function AdminRoles() {
                                     <button
                                         type="button"
                                         onClick={() => setShowPassword(!showPassword)}
-                                        className="absolute right-2 top-2 text-gray-500"
+                                        className="absolute right-2 top-8 text-gray-500"
                                     >
                                         {showPassword ? (
                                             <EyeOff className="w-4 h-4" />
@@ -543,13 +593,14 @@ export default function AdminRoles() {
                                     </button>
                                 </div>
 
-                                {/* NEW PASSWORD (ONLY EDIT MODE) */}
+                                {/* NEW PASSWORD */}
                                 {editId && (
-                                    <div className="relative">
-                                        <input
-                                            placeholder="New Password"
+                                    <div className="space-y-1 relative">
+                                        <Label className="text-xs">New Password</Label>
+
+                                        <Input
                                             type={showPassword ? "text" : "password"}
-                                            className="text-xs p-2 border rounded-md w-full pr-8"
+                                            className="text-xs pr-8"
                                             value={newPassword}
                                             onChange={(e) => setNewPassword(e.target.value)}
                                         />
@@ -557,13 +608,15 @@ export default function AdminRoles() {
                                         <button
                                             type="button"
                                             onClick={() => setShowPassword(!showPassword)}
-                                            className="absolute right-2 top-2 text-xs text-gray-500"
+                                            className="absolute right-2 top-8 text-gray-500 text-xs"
                                         >
-                                            {showPassword ? "🙈" : "👁"}
-                                        </button>
+                                            {showPassword ? (
+                                                <EyeOff className="w-4 h-4" />
+                                            ) : (
+                                                <Eye className="w-4 h-4" />
+                                            )}                                        </button>
                                     </div>
                                 )}
-
                             </div>
                         </div>
 
@@ -580,7 +633,6 @@ export default function AdminRoles() {
                             <button
                                 className="text-xs px-3 py-1 bg-blue-600 text-white rounded-md"
                                 onClick={() => {
-
                                     if (editId) {
                                         setUsers(users.map(u =>
                                             u.id === editId
@@ -590,6 +642,7 @@ export default function AdminRoles() {
                                                     role: form.role,
                                                     avatar: form.avatar,
                                                     password: newPassword || form.password,
+                                                    aircraft: form.aircraft,
                                                 }
                                                 : u
                                         ))
@@ -603,15 +656,17 @@ export default function AdminRoles() {
                                                 email: "",
                                                 avatar: form.avatar,
                                                 password: form.password,
+                                                aircraft: form.aircraft,
                                             },
                                         ])
                                     }
 
-                                    setForm({ name: "", role: "", password: "", avatar: "" })
+                                    setForm({ name: "", role: "", password: "", avatar: "", aircraft: "" })
                                     setNewPassword("")
                                     setShowPassword(false)
-                                    setOpen(false)
                                     setEditId(null)
+
+                                    setOpen(false) 
                                 }}
                             >
                                 {editId ? "Update" : "Save"}
@@ -625,4 +680,51 @@ export default function AdminRoles() {
         </AppShell>
 
     )
+}
+function getRoleStyle(role: string) {
+    switch (role) {
+        case "ASI Manager":
+            return "text-red-800 bg-red-100 border border-red-400"
+
+        case "ASI/ESI Engineer":
+            return "text-blue-800 bg-blue-100 border border-blue-400"
+
+        case "Analyst":
+            return "text-green-800 bg-green-100 border border-green-400"
+
+        case "Auditor":
+            return "text-purple-800 bg-purple-100 border border-purple-400"
+
+        case "Admin":
+            return "text-yellow-800 bg-yellow-100 border border-yellow-400"
+
+        default:
+            return "text-gray-800 bg-gray-100 border border-gray-400"
+    }
+}
+
+function getSystemBoxColor(title: string) {
+    switch (title) {
+        case "Classification":
+            return "bg-red-100 border-red-300"
+
+        case "Network":
+            return "bg-blue-100 border-blue-300"
+
+        default:
+            return "bg-green-100 border-green-300"
+    }
+}
+
+function getSystemDotColor(title: string) {
+    switch (title) {
+        case "Classification":
+            return "bg-red-500"
+
+        case "Network":
+            return "bg-blue-500"
+
+        default:
+            return "bg-green-500"
+    }
 }

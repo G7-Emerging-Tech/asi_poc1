@@ -11,43 +11,62 @@ import {
 } from "@/components/ui/table"
 
 
-const wrFleiData = [
+type WrFleiRow = {
+  aircraft: string
+  current: number
+  delta: number
+  pwd: number
+  risk: "High" | "Monitor" | "Low"
+}
+
+type MissionSeverityRow = {
+  opc: string
+  type: string
+  missions: number
+  avgFlei: number
+  wrFleiSum: number
+  total: string
+}
+
+type LifeProjectionRow = {
+  aircraft: string
+  usageGradient: string
+  currentAfh: number
+  flei6000: number
+  yearFlei: number
+  afhFlei: number
+}
+
+const wrFleiData: WrFleiRow[] = [
   {
     aircraft: "AC-01",
     current: 0.4387,
-    currentColor: "text-yellow-700",
-    delta: "+1.882e-2",
+    delta: 1.882e-2,
     pwd: 2025,
-    pwdColor: "text-red-700",
     risk: "High",
   },
   {
     aircraft: "AC-02",
     current: 0.3418,
-    currentColor: "text-green-700",
-    delta: "+0.000e+0",
+    delta: 0.0,
     pwd: 2030,
-    pwdColor: "text-yellow-700",
     risk: "Monitor",
   },
   {
     aircraft: "AC-03",
     current: 0.2867,
-    currentColor: "text-green-700",
-    delta: "+1.315e-2",
+    delta: 1.315e-2,
     pwd: 2029,
-    pwdColor: "text-yellow-700",
     risk: "Low",
   },
 ]
 
-const missionSeverityData = [
+const missionSeverityData: MissionSeverityRow[] = [
   {
     opc: "04",
     type: "Aerobatics (LLA/LAT)",
     missions: 12,
     avgFlei: 6.732e-5,
-    avgFleiColor: "text-red-700",
     wrFleiSum: 8.079e-4,
     total: "2%",
   },
@@ -56,7 +75,6 @@ const missionSeverityData = [
     type: "Air-to-Ground Training",
     missions: 420,
     avgFlei: 6.3e-5,
-    avgFleiColor: "text-black-700",
     wrFleiSum: 2.645e-2,
     total: "68%",
   },
@@ -65,7 +83,6 @@ const missionSeverityData = [
     type: "FAM/Ferry/Navigation",
     missions: 198,
     avgFlei: 2.307e-5,
-    avgFleiColor: "text-black-700",
     wrFleiSum: 4.726e-3,
     total: "12%",
   },
@@ -74,13 +91,12 @@ const missionSeverityData = [
     type: "Air-to-Air Engagement",
     missions: 312,
     avgFlei: 2.387e-5,
-    avgFleiColor: "text-black-700",
     wrFleiSum: 7.199e-3,
     total: "18%",
   },
 ]
 
-const lifeProjectionData = [
+const lifeProjectionData: LifeProjectionRow[] = [
   {
     aircraft: "AC-01",
     usageGradient: "8.249e-5",
@@ -143,8 +159,8 @@ export default function FatigueManagement() {
               WR FLEI COMPARISON — FLEET
             </div>
 
-            <Table className="text-xs">
-              <TableHeader className="bg-muted">
+            <Table className="text-xs ">
+              <TableHeader className="bg-muted ">
                 <TableRow>
                   <TableHead className="font-bold text-[10px] text-muted-foreground">AIRCRAFT</TableHead>
                   <TableHead className="font-bold text-[10px] text-muted-foreground">WR FLEI (CURRENT)</TableHead>
@@ -162,17 +178,17 @@ export default function FatigueManagement() {
                       {row.aircraft}
                     </TableCell>
 
-                    <TableCell className={`font-semibold ${row.currentColor}`}>
+                    <TableCell className={`font-semibold ${getCurrentClass(row.current)}`}>
                       {row.current.toFixed(4)}
                     </TableCell>
 
                     <TableCell>
                       <span className="font-mono text-blue-700">
-                        {row.delta}
+                        {formatDelta(row.delta)}
                       </span>
                     </TableCell>
 
-                    <TableCell className={`font-semibold ${row.pwdColor}`}>
+                    <TableCell className={`font-semibold ${getPwdClass(row.pwd)}`}>
                       {row.pwd}
                     </TableCell>
 
@@ -224,7 +240,7 @@ export default function FatigueManagement() {
                       {row.missions.toLocaleString()}
                     </TableCell>
 
-                    <TableCell className={`font-mono ${row.avgFleiColor}`}>
+                    <TableCell className={`font-mono ${getAvgFleiClass(row.avgFlei)}`}>
                       {row.avgFlei.toExponential(3)}
                     </TableCell>
 
@@ -312,4 +328,35 @@ export default function FatigueManagement() {
       </div>
     </AppShell>
   )
+}
+
+function getCurrentClass(value: number) {
+  if (value >= 0.4) {
+    return "text-yellow-700"
+  }
+
+  return "text-green-700"
+}
+
+function getPwdClass(year: number) {
+  if (year <= 2025) {
+    return "text-red-700"
+  }
+
+  return "text-yellow-700"
+}
+
+function getAvgFleiClass(value: number) {
+  if (value >= 6.5e-5) {
+    return "text-red-700"
+  }
+
+  return "text-black-700"
+}
+
+function formatDelta(value: number) {
+  const sign = value >= 0 ? "+" : "-"
+  const abs = Math.abs(value)
+
+  return `${sign}${abs.toExponential(3)}`
 }

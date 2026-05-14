@@ -20,11 +20,17 @@ import {
   SelectItem,
 } from "@/components/ui/select"
 import { useState } from "react"
-
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+} from "@/components/ui/dialog"
 
 export default function Login() {
   const router = useRouter();
-  const [ loading, setLoading ] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [openDialog, setOpenDialog] = useState(false)
+  const [selectedAircraft, setSelectedAircraft] = useState("")
 
   const AIRCRAFT_MODELS = [
     "HERCULES",
@@ -77,7 +83,7 @@ export default function Login() {
               <form
                 onSubmit={(e) => {
                   e.preventDefault()
-                  handleSignIn()
+                  setOpenDialog(true)
                 }}
               >
                 <FieldGroup>
@@ -91,31 +97,6 @@ export default function Login() {
                     </span>
                   </div>
 
-                  <Field>
-                    <FieldLabel htmlFor="aircraftModel" className="text-foreground/60 text-xs font-semibold">
-                      SELECT AIRCRAFT MODEL
-                    </FieldLabel>
-
-                    <Select required>
-                      <SelectTrigger className="w-full text-xs">
-                        <SelectValue placeholder="AIRCRAFT MODEL" />
-                      </SelectTrigger>
-
-                      <SelectContent
-                        position="popper"
-                        side="bottom"
-                        align="start"
-                        sideOffset={4}
-                      >
-
-                        {AIRCRAFT_MODELS.map((model) => (
-                          <SelectItem key={model} value={model}>
-                            {model}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </Field>
 
                   <Field>
                     <FieldLabel htmlFor="username" className="text-foreground/60 text-xs font-semibold">
@@ -169,6 +150,52 @@ export default function Login() {
         </Card>
 
       </div>
+      <Dialog open={openDialog} onOpenChange={setOpenDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogTitle className="text-sm font-semibold">
+            Select Aircraft Model
+          </DialogTitle>
+
+          <Field>
+            <FieldLabel
+              htmlFor="aircraftModel"
+              className="text-foreground/60 text-xs font-semibold"
+            >
+              SELECT AIRCRAFT MODEL
+            </FieldLabel>
+
+            <Select
+              required
+              value={selectedAircraft}
+              onValueChange={setSelectedAircraft}
+            >
+              <SelectTrigger className="w-full text-xs">
+                <SelectValue placeholder="AIRCRAFT MODEL" />
+              </SelectTrigger>
+
+              <SelectContent>
+                {AIRCRAFT_MODELS.map((model) => (
+                  <SelectItem key={model} value={model}>
+                    {model}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+
+          <Button
+            onClick={handleSignIn}
+            disabled={!selectedAircraft || loading}
+            className="flex items-center gap-2 rounded-lg bg-blue-800 hover:bg-blue-500 px-4 py-2 text-white cursor-pointer"
+          >
+            {loading && (
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+            )}
+
+            {loading ? "Authenticating..." : "Sign In to AIIMS"}
+          </Button>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

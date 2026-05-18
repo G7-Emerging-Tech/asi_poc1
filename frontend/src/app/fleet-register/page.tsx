@@ -51,7 +51,7 @@ const dummyData: FleetRow[] = [
   {
     tail: "AC-01",
     afh: 5448.82,
-    deltaAnnual: 228.19,
+    deltaAnnual: 228.1982,
     wrFlei: 0.4387,
     wfFlei: 0.0968,
     lifePercent: 91,

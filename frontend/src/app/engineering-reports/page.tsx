@@ -17,8 +17,25 @@ import { Separator } from "@/components/ui/separator"
 
 export default function EngineeringReports() {
   const [selected, setSelected] = useState<any>(null)
-
-  const data = [
+  type ReportType = {
+    reference: string
+    title: string
+    type: string
+    status: "Submitted" | "Reviewed" | "Approved" | "Accepted"
+    date: string
+  
+    report: {
+      header: string
+  
+      sections: {
+        title: string
+        content: string
+      }[]
+  
+      footer: string
+    }
+  }
+  const data: ReportType[] = [
     {
       reference: "LPM12Y/ACR/AC-08",
       title:
@@ -67,7 +84,7 @@ export default function EngineeringReports() {
       reference: "F-A-18D/ASI/YER",
       title: "F/A-18D Annual Structural Integrity Report",
       type: "Annual",
-      status: "Approved",
+      status: "Submitted",
       date: "Jan 2024",
 
       report: {
@@ -251,8 +268,7 @@ export default function EngineeringReports() {
                 <TableHead className="text-[10px] text-muted-foreground font-semibold">
                   DATE
                 </TableHead>
-                <TableHead className="text-[10px] text-muted-foreground font-semibold">
-                </TableHead>
+                <TableHead className="text-[10px] text-muted-foreground font-semibold" />
               </TableRow>
             </TableHeader>
 

@@ -10,11 +10,11 @@ export const SIDEBAR_NAV = [
                 label: "Fleet Dashboard",
                 icon: LayoutDashboard,
             },
-            {
-                path: "",
-                label: "Active Alerts",
-                icon: AlertTriangle,
-            },
+            // {
+            //     path: "",
+            //     label: "Active Alerts",
+            //     icon: AlertTriangle,
+            // },
         ],
     },
     {

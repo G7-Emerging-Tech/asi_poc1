@@ -2,7 +2,7 @@
 
 import { AppShell } from "@/components/app-shell"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { cn } from "@/lib/utils";
 import { Check, Plus, Section } from "lucide-react"
 import { useState } from "react";
+import { formatDateDDMMYY } from "../utils/dateFormat";
 
 type FleetRow = {
   tail: string;
@@ -348,13 +349,15 @@ export default function FleetRegister() {
               <DialogTitle>
                 Aircraft Detail — {selectedRow?.tail}
               </DialogTitle>
+              <DialogDescription className="border-b-1 mt-1"/>
             </DialogHeader>
 
             {selectedRow && (
               <div className="space-y-4">
+                
                 <div className="grid grid-cols-12 gap-2">
-
-                  <div className="col-span-12 md:col-span-7 ">
+                  {/* Left column */}
+                  <div className="col-span-6 md:col-span-6 space-y-3">
                     <div className="rounded-xl border bg-white p-3">
                       <div className="text-[11px] font-semibold text-muted-foreground tracking-wide uppercase">
                         flight hours
@@ -377,12 +380,31 @@ export default function FleetRegister() {
 
                         <div className="grid grid-cols-1 gap-x-2 gap-y-3 text-xs mt-2">
                           <DetailLine label="AFH at LPM12Y Induction" value={selectedRow.lpm12yInductionAFH ? `${selectedRow.lpm12yInductionAFH.toFixed(2)} hr` : "-"} valueClass={selectedRow.lpm12yInductionAFH ? "text-blue-600" : "text-muted-foreground"} />
+                          <DetailLine label="LPM12Y Date In" value={selectedRow.lpm12yDateIn ? formatDateDDMMYY(selectedRow.lpm12yDateIn) : "-"} valueClass={selectedRow.lpm12yDateIn ? "text-blue-600" : "text-muted-foreground"} />
+                          <DetailLine label="LPM12Y Date Out" value={selectedRow.lpm12yDateOut ? formatDateDDMMYY(selectedRow.lpm12yDateOut) : "-"} valueClass={selectedRow.lpm12yDateOut ? "text-blue-600" : "text-muted-foreground"} />
+                          <DetailLine label="Next Servicing (PMI 2)" value={selectedRow.nextServicing ? formatDateDDMMYY(selectedRow.nextServicing) : "-"} valueClass={selectedRow.nextServicing ? "text-blue-600" : "text-muted-foreground"} />
+                          <DetailLine label="Engine LH S/N" value={selectedRow.engineLH ?? "-"} valueClass={selectedRow.engineLH ? "text-blue-600" : "text-muted-foreground"} />
+                          <DetailLine label="Engine RH S/N" value={selectedRow.engineRH ?? "-"} valueClass={selectedRow.engineRH ? "text-blue-600" : "text-muted-foreground"} />
                         </div>
                       </div>
                     )}
                       
                   </div>
+                  {/* Right column */}
+                  <div className="col-span-6 md:col-span-6 space-y-3">
+                    <div className="rounded-xl border bg-white p-3">
+                      <div className="text-[11px] font-semibold text-muted-foreground tracking-wide uppercase">
+                        flei summary
+                      </div>
+
+                      <div className="mt-2 space-y-2">
+                        <MetricRow label="Wing Root (WR)" value={selectedRow.wrFlei?.toFixed?.(4) ?? `${selectedRow.wrFlei}`} accentClass={getWrFleiClass(selectedRow.wrFlei)} />
+                      </div>
+                    </div>
+
+                  </div>
                 </div>
+
                 
               </div>
             )}
@@ -512,12 +534,15 @@ function MetricRow({
   value: React.ReactNode;
   accentClass?: string;
 }) {
+  const numericValue = typeof value === "number" ? value : Number(value);
+  const progressValue = !isNaN(numericValue) ? Math.min((numericValue/0.5) * 100, 100) : 0;
   return (
     <div className="flex items-center justify-between gap-3 text-xs">
       <span className="text-muted-foreground font-medium">{label}</span>
       <span className={cn("inline-flex items-center rounded-md px-2 py-0.5 font-semibold", accentClass)}>
         {value}
       </span>
+      <Progress value={progressValue} className="h-2 w-24 bg-muted" indicatorClassName={cn("bg-green-600", accentClass)} />
     </div>
   );
 }

@@ -5,12 +5,12 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Progress } from "@/components/ui/progress";
-import { Separator } from "@/components/ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
-import { Check, Plus, Section } from "lucide-react"
+import { Check, Plus } from "lucide-react"
 import { useState } from "react";
-import { formatDateDDMMYY } from "../utils/dateFormat";
+import { formatDateDDMMYY } from "@/utils/dateFormat";
+import { text } from "stream/consumers";
 
 type FleetRow = {
   tail: string;
@@ -21,7 +21,7 @@ type FleetRow = {
   lifePercent: number;
   defectsTotal: number;
   deltaLatest: number;
-  corr: number;
+  corrosions: number;
   lpm12y: boolean;
   status: "operational" | "maintenance";
 
@@ -58,7 +58,7 @@ const dummyData: FleetRow[] = [
     lifePercent: 91,
     defectsTotal: 108,
     deltaLatest: 3,
-    corr: 0,
+    corrosions: 0,
     lpm12y: true,
     status: "operational",
     afhPrev: 5210.63,
@@ -90,7 +90,7 @@ const dummyData: FleetRow[] = [
     lifePercent: 66,
     defectsTotal: 44,
     deltaLatest: 0,
-    corr: 0,
+    corrosions: 0,
     lpm12y: true,
     status: "operational",
     afhPrev: 3985.01,
@@ -122,7 +122,7 @@ const dummyData: FleetRow[] = [
     lifePercent: 80,
     defectsTotal: 29,
     deltaLatest: 3,
-    corr: 0,
+    corrosions: 0,
     lpm12y: false,
     status: "operational",
     afhPrev: 3939.89,
@@ -154,7 +154,7 @@ const dummyData: FleetRow[] = [
     lifePercent: 73,
     defectsTotal: 48,
     deltaLatest: 0,
-    corr: 0,
+    corrosions: 0,
     lpm12y: false,
     status: "maintenance",
     afhPrev: 4029.42,
@@ -211,18 +211,18 @@ export default function FleetRegister() {
             <Table className="min-w-[900px] w-full border-0 table-fixed">
               <TableHeader className="sticky top-0 z-10 text-xs">
                 <TableRow>
-                  <TableHead className="whitespace-nowrap truncate">Tail</TableHead>
+                  <TableHead className="whitespace-nowrap truncate w-14">Tail</TableHead>
                   <TableHead className="whitespace-nowrap truncate">AFH</TableHead>
                   <TableHead className="whitespace-nowrap truncate w-24">Δ Annual AFH</TableHead>
-                  <TableHead className="whitespace-nowrap truncate">WR FLEI</TableHead>
-                  <TableHead className="whitespace-nowrap truncate">WF FLEI</TableHead>
+                  <TableHead className="whitespace-nowrap truncate w-20">WR FLEI</TableHead>
+                  <TableHead className="whitespace-nowrap truncate w-20">WF FLEI</TableHead>
                   <TableHead className="whitespace-nowrap truncate w-30">Life %</TableHead>
                   <TableHead className="whitespace-nowrap truncate w-22">Total Defects</TableHead>
-                  <TableHead className="whitespace-nowrap truncate">Δ Latest AFH</TableHead>
-                  <TableHead className="whitespace-nowrap truncate">Correlation</TableHead>
+                  <TableHead className="whitespace-nowrap truncate w-24">Δ Latest AFH</TableHead>
+                  <TableHead className="whitespace-nowrap truncate w-22">Corrosions</TableHead>
                   <TableHead className="whitespace-nowrap truncate w-20">LPM 12y</TableHead>
                   <TableHead className="whitespace-nowrap truncate w-28">Status</TableHead>
-                  <TableHead className="whitespace-nowrap truncate"/>
+                  <TableHead className="whitespace-nowrap truncate w-18" />
                 </TableRow>
               </TableHeader>
 
@@ -290,12 +290,12 @@ export default function FleetRegister() {
                       })()}
                     </TableCell>
                     <TableCell className="whitespace-nowrap truncate">
-                      <span className={`font-medium ${getDefectsTextClass(row.defectsTotal)}`}>
+                      <span className={`font-medium ${getTotalDefectsTextClass(row.defectsTotal)}`}>
                         {row.defectsTotal}
                       </span>
                     </TableCell>
                     <TableCell className="whitespace-nowrap truncate">{row.deltaLatest}</TableCell>
-                    <TableCell className="whitespace-nowrap truncate">{row.corr}</TableCell>
+                    <TableCell className="whitespace-nowrap truncate">{row.corrosions}</TableCell>
                     <TableCell className="whitespace-nowrap truncate">
                       {row.lpm12y ? (
                         <span className="inline-flex items-center rounded-md bg-green-100 gap-1 px-1 py-0.5 text-xs text-green-800 border border-green-300">
@@ -344,37 +344,37 @@ export default function FleetRegister() {
             if (!open) setSelectedRow(null);
           }}
         >
-          <DialogContent className="max-w-3xl p-4 md:p-5">
+          <DialogContent className="w-[95vw] max-w-md md:max-w-4xl sm:max-w-2xl p-4 md:p-6">
             <DialogHeader>
-              <DialogTitle>
+              <DialogTitle className="font-bold">
                 Aircraft Detail — {selectedRow?.tail}
               </DialogTitle>
-              <DialogDescription className="border-b-1 mt-1"/>
+              <DialogDescription className="border-b-2 pb-3"/>
             </DialogHeader>
 
             {selectedRow && (
-              <div className="space-y-4">
-                
-                <div className="grid grid-cols-12 gap-2">
+              <div className="space-y-0.5">
+          
+                <div className="grid grid-cols-12 gap-4">
                   {/* Left column */}
-                  <div className="col-span-6 md:col-span-6 space-y-3">
-                    <div className="rounded-xl border bg-white p-3">
-                      <div className="text-[11px] font-semibold text-muted-foreground tracking-wide uppercase">
+                  <div className="col-span-6 md:col-span-6">
+                    <div className="pb-4">
+                      <div className="text-[11px] font-bold text-muted-foreground tracking-wide uppercase">
                         flight hours
                       </div>
 
                       <div className="grid grid-cols-1 gap-x-2 gap-y-3 text-xs mt-2">
-                        <DetailLine label="AFH (Current)" value={`${selectedRow.afh?.toFixed(2) ?? "-"} hr`} />
-                        <DetailLine label="AFH (Previous period)" value={`${selectedRow.afhPrev?.toFixed(2) ?? "-"} hr`} />
+                        <DetailLine label="AFH (Current)" value={`${selectedRow.afh?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) ?? "-"} hr`} />
+                        <DetailLine label="AFH (Previous period)" value={`${selectedRow.afhPrev?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) ?? "-"} hr`} />
                         <DetailLine label="Annual Increment (latest)" value={formatSignedHours(selectedRow.deltaAnnual)} valueClass={selectedRow.deltaAnnual > 0 ? "text-emerald-600" : "text-muted-foreground"} />
-                        <DetailLine label="Design Life Limit" value={selectedRow.designLifeLimit ? `${selectedRow.designLifeLimit} hr` : "-"} />
+                        <DetailLine label="Design Life Limit" value={selectedRow.designLifeLimit ? `${selectedRow.designLifeLimit.toLocaleString()} hr` : "-"} />
                         <DetailLine label="PWD (6000 AFH basis)" value={selectedRow.pwdYear ? `${selectedRow.pwdYear}` : "-"} />
                       </div>
                     </div>
 
                     {selectedRow.lpm12y && (
-                      <div className="rounded-xl border bg-white p-3">
-                        <div className="text-[11px] font-semibold text-blue-600 tracking-wide uppercase">
+                      <div>
+                        <div className="text-[11px] font-bold text-blue-600 tracking-wide uppercase">
                           LPM12Y programme
                         </div>
 
@@ -391,21 +391,93 @@ export default function FleetRegister() {
                       
                   </div>
                   {/* Right column */}
-                  <div className="col-span-6 md:col-span-6 space-y-3">
-                    <div className="rounded-xl border bg-white p-3">
-                      <div className="text-[11px] font-semibold text-muted-foreground tracking-wide uppercase">
+                  <div className="col-span-6 md:col-span-6">
+                    <div className="border-b-2 pb-4">
+                      <div className="text-[11px] font-bold text-muted-foreground tracking-wide uppercase">
                         flei summary
                       </div>
 
                       <div className="mt-2 space-y-2">
-                        <MetricRow label="Wing Root (WR)" value={selectedRow.wrFlei?.toFixed?.(4) ?? `${selectedRow.wrFlei}`} accentClass={getWrFleiClass(selectedRow.wrFlei)} />
+                        <MetricRow label="Wing Root (WR)" value={selectedRow.wrFlei?.toFixed?.(4) ?? `${selectedRow.wrFlei}`} accentClass={getWrFleiClass(selectedRow.wrFlei)} barClass={getWrFleiBar(selectedRow.wrFlei)} max={0.6} />
+                        <MetricRow label="Wing Fold (WF)" value={selectedRow.wfFlei?.toFixed?.(4) ?? `${selectedRow.wfFlei}`} accentClass={getWfFleiClass(selectedRow.wfFlei)} barClass={getWfFleiBar(selectedRow.wfFlei)} max={0.2} />
                       </div>
                     </div>
 
+                    <div className="gap-x-2 gap-y-3 space-y-2 mt-4">
+                      <InfoLine label="Est. FLEI @6000 AFH" value={selectedRow.estFleiAt6000 ? selectedRow.estFleiAt6000.toFixed(4) : "-"} valueClass="text-muted-foreground" />
+                      <InfoLine label="Est. Year FLEI=1.0" value={selectedRow.estYearFlei ?? "-"} valueClass="text-blue-600" />
+                      <InfoLine label="Est. AFH at FLEI=1.0" value={selectedRow.estAfhFlei ? `${selectedRow.estAfhFlei.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} hr` : "-"} valueClass="text-muted-foreground" />
+                      <InfoLine label="Strain Gauge Status" value={selectedRow.strainGaugeStatus ?? "-"} valueClass={selectedRow.strainGaugeStatus?.startsWith("Error") ? "text-red-600" : selectedRow.strainGaugeStatus?.startsWith("Warning") ? "text-yellow-600" : "text-muted-foreground"} />
+                    </div>
+
+                    {selectedRow.lpm12y && (
+                      <div className="mt-4 border-t-2 pt-4">
+                        <div className="text-[11px] font-bold text-muted-foreground tracking-wide uppercase">
+                          LPM12Y NCRD SUMMARY
+                        </div>
+
+                        <div className="mt-2 grid grid-cols-2 gap-2">
+                          <KpiMini title="Total NCRDs" value={selectedRow.ncrdTotal ?? "-"} valueClass="text-black" />
+                          <KpiMini title="Incorporated" value={selectedRow.ncrdIncorporated ?? "-"} valueClass="text-green-600" />
+                          <KpiMini title="On Hold" value={selectedRow.ncrdOnHold ?? "-"} valueClass="text-yellow-600" />
+                          <KpiMini title="Surface Defects" value={selectedRow.ncrdSurfaceDefects ?? "-"} valueClass="text-orange-600" />
+                        </div>
+                      </div>
+                    )}
+
+                    {selectedRow.lpm12y && (
+                      <div className="mt-2 space-y-2">
+                        <div className="h-auto rounded-md border border-yellow-500 flex items-start bg-yellow-500/20 px-2 py-1">
+                          <p className="h-auto text-[13px] text-yellow-700 flex items-start justify-center whitespace-pre-wrap">
+                            {selectedRow.notes ?? "-"}
+                          </p>
+                        </div>
+                        <div className="h-auto rounded-md border border-red-500 flex items-start bg-red-500/20 px-2 py-1">
+                          <p className="h-auto text-[13px] text-red-700 flex items-start justify-center whitespace-pre-wrap">
+                            {selectedRow.activeEntry ?? "-"}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <div className="col-span-12">
+                    <div className="grid grid-cols-12 space-x-4 w-full">
+                      {(() => {
+                        const text = getTotalDefectsTextClass(selectedRow.defectsTotal);
+                        const border = getBorderFromTextClass(text);
+
+                        return (
+                          <div className={`col-span-4 md:col-span-4 ${border} border-t-4 rounded-xl`}>
+                            <BottomKpi title="total defects (cumulative)" value={selectedRow.defectsTotal} valueClass={getTotalDefectsTextClass(selectedRow.defectsTotal)} />
+                          </div>
+                        );
+                      })()}
+
+                      {(() => {
+                      const text = getDefectsTextClass(selectedRow.deltaLatest);
+                      const border = getBorderFromTextClass(text);
+
+                        return (
+                          <div className={`col-start-5 md:col-start-5 col-span-4 md:col-span-4 ${border} border-t-4 rounded-xl`}>
+                            <BottomKpi title="defects (latest cycle)" value={selectedRow.deltaLatest}  valueClass={getDefectsTextClass(selectedRow.deltaLatest)} />
+                          </div>
+                        )
+                      })()}
+                        
+                      {(() => {
+                      const text = getCorrosionsTextClass(selectedRow.corrosions);
+                      const border = getBorderFromTextClass(text);
+
+                      return (
+                        <div className={`col-start-9 md:col-start-9 col-span-4 md:col-span-4 ${border} border-t-4 rounded-xl`}>
+                          <BottomKpi title="corrosions (latest cycle)" value={selectedRow.corrosions} valueClass={getCorrosionsTextClass(selectedRow.corrosions)} />
+                        </div>
+                      );
+                      })()}
+  
+                    </div>
                   </div>
                 </div>
-
-                
               </div>
             )}
           </DialogContent>
@@ -464,13 +536,25 @@ function getWrFleiClass(value: number) {
     : "text-green-700";
 }
 
+function getWrFleiBar(value: number) {
+  return value >= 0.4
+    ? "bg-yellow-500"
+    : "bg-green-600";
+}
+
 function getWfFleiClass(value: number) {
   return value >= 0.2
     ? "text-yellow-700"
     : "text-green-700";
 }
 
-function getDefectsTextClass(value: number) {
+function getWfFleiBar(value: number) { 
+  return value >= 0.2
+    ? "bg-yellow-500"
+    : "bg-green-600";
+}
+
+function getTotalDefectsTextClass(value: number) {
   if (value >= 70) {
     return "text-red-600";
   }
@@ -480,6 +564,32 @@ function getDefectsTextClass(value: number) {
   }
 
   return "text-foreground"; // default black
+}
+
+function getDefectsTextClass(value: number) {
+  if (value > 40) {
+    return "text-red-600";
+  }
+  if (value > 20) {
+    return "text-yellow-600";
+  }
+
+  return "text-foreground"; // default black
+}
+
+function getCorrosionsTextClass(value: number) {
+  if (value > 20) {
+    return "text-red-600";
+  }
+  if (value > 5) {
+    return "text-yellow-600";
+  }
+  return "text-foreground"; // default black
+}
+
+function getBorderFromTextClass(textClass: string) {
+  if (!textClass || textClass === "text-foreground") return "border-green-700";
+  return textClass.replace("text-", "border-");
 }
 
 function formatSignedHours(n: number) {
@@ -516,9 +626,9 @@ function InfoLine({
   valueClass?: string;
 }) {
   return (
-    <div className="flex items-center justify-between">
-        <span className="text-muted-foreground">{label}:</span>
-        <span className={cn("font-semibold", valueClass)}>{value}</span>
+    <div className="flex items-center justify-between w-full">
+        <span className="text-muted-foreground font-semibold text-[11px]">{label}:</span>
+        <span className={cn("text-[11px] text-right", valueClass)}>{value}</span>
     </div>
     
 
@@ -529,20 +639,27 @@ function MetricRow({
   label,
   value,
   accentClass,
+  barClass,
+  max = 1,
 }: {
   label: string;
   value: React.ReactNode;
   accentClass?: string;
+  barClass?: string;
+  max?: number;
 }) {
   const numericValue = typeof value === "number" ? value : Number(value);
-  const progressValue = !isNaN(numericValue) ? Math.min((numericValue/0.5) * 100, 100) : 0;
+  const progressValue = !isNaN(numericValue) ? Math.min((numericValue/max) * 100, 100) : 0;
   return (
-    <div className="flex items-center justify-between gap-3 text-xs">
-      <span className="text-muted-foreground font-medium">{label}</span>
-      <span className={cn("inline-flex items-center rounded-md px-2 py-0.5 font-semibold", accentClass)}>
-        {value}
-      </span>
-      <Progress value={progressValue} className="h-2 w-24 bg-muted" indicatorClassName={cn("bg-green-600", accentClass)} />
+    <div className="space-y-1">
+      <div className="flex items-center justify-between text-xs">
+        <span className="text-muted-foreground font-medium">{label}</span>
+        <span className={cn("inline-flex items-center rounded-md px-2 py-0.5 font-semibold", accentClass)}>
+          {value}
+        </span>
+        
+      </div>
+      <Progress value={progressValue} className="h-2 w-full bg-muted" indicatorClassName={cn(barClass)} />
     </div>
   );
 }
@@ -557,9 +674,9 @@ function KpiMini({
   valueClass?: string;
 }) {
   return (
-    <div className="rounded-lg border bg-muted/30 p-2">
+    <div className="rounded-lg border bg-muted/30 p-2 text-center">
+      <div className={cn("mt-0.5 text-[20px] font-medium", valueClass)}>{value}</div>
       <div className="text-[10px] text-muted-foreground font-medium uppercase">{title}</div>
-      <div className={cn("mt-0.5 text-[14px] font-bold", valueClass)}>{value}</div>
     </div>
   );
 }
@@ -575,7 +692,7 @@ function BottomKpi({
 }) {
   return (
     <div className="rounded-xl border bg-white p-3 text-center">
-      <div className="text-[10px] text-muted-foreground font-semibold tracking-wide uppercase">
+      <div className="text-[12px] text-muted-foreground font-bold tracking-wide uppercase">
         {title}
       </div>
       <div className={cn("mt-1 text-2xl font-extrabold", valueClass)}>{value}</div>

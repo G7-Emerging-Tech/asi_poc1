@@ -62,7 +62,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <SidebarProvider open={open} onOpenChange={handleOpenChange}>
       <Sidebar className="z-20">
-        <SidebarHeader className="flex flex-row items-center gap-3 bg-blue-800 text-white font-semibold max-h-20 h-full">
+        <SidebarHeader className="flex flex-row px-2 items-center gap-3 bg-blue-800 text-white font-semibold max-h-20 h-full">
           <Avatar className="h-8 w-8">
             <AvatarImage src="" alt="AIIMS Logo" />
             <AvatarFallback className="rounded-lg text-xs bg-blue-300/60 border border-white text-white">ASI</AvatarFallback>

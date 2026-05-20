@@ -7,7 +7,7 @@ import { Field, FieldLabel } from "@/components/ui/field";
 import { Progress } from "@/components/ui/progress";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
-import { Check, Plus } from "lucide-react"
+import { AlertTriangle, Check, Plus } from "lucide-react"
 import { useState } from "react";
 import { formatDateDDMMYY } from "@/utils/dateFormat";
 import { text } from "stream/consumers";
@@ -433,8 +433,8 @@ export default function FleetRegister() {
                           </p>
                         </div>
                         <div className="h-auto rounded-md border border-red-500 flex items-start bg-red-500/20 px-2 py-1">
-                          <p className="h-auto text-[13px] text-red-700 flex items-start justify-center whitespace-pre-wrap">
-                            {selectedRow.activeEntry ?? "-"}
+                          <p className="h-auto text-[13px] gap-1 text-red-700 flex items-start justify-center whitespace-pre-wrap">
+                            <AlertTriangle className="h-4 w-4" />{selectedRow.activeEntry ?? "-"}
                           </p>
                         </div>
                       </div>

@@ -1,5 +1,4 @@
-import { Activity, AlertTriangle, Bot, ClipboardList, FileSearch, FileText, Gauge, LayoutDashboard, Leaf, ShieldCheck, Users } from "lucide-react";
-import path from "path";
+import { Activity, AlertTriangle, Bot, ClipboardList, FileSearch, FileText, Gauge, LayoutDashboard, Map, ShieldCheck, Users } from "lucide-react";
 
 export const SIDEBAR_NAV = [
     {
@@ -33,7 +32,7 @@ export const SIDEBAR_NAV = [
         ],
     },
     {
-        label: "Strucural",
+        label: "Structural",
         items: [
             {
                 path: "/fatigue-management",
@@ -41,9 +40,9 @@ export const SIDEBAR_NAV = [
                 icon: Gauge,
             },
             {
-                path: "/environmental",
-                label: "Environmental",
-                icon: Leaf,
+                path: "/damage-mapping",
+                label: "Damage Mapping",
+                icon: Map,
             },
         ],
     },

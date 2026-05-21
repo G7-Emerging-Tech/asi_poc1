@@ -47,9 +47,6 @@ export default function AIIMSAssistant() {
   const chips = [
     "AC-08 LPM12Y report",
     "AC-07 LPM12Y report",
-    "AC-02 LPM12Y report",
-    "AC-01 LPM12Y report",
-    "SPD new technique AC-08",
     "Fleet FLEI summary",
   ]
 

@@ -41,14 +41,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import AircraftViewer from "@/components/aircraft-viewer";
+import * as THREE from "three";
 
 /* TYPES */
-type Severity = "low" | "medium" | "high";
+type Severity = "green" | "yellow" | "orange" | "red";
 
 type DamagePoint = {
   id: string;
-  x: number;
-  y: number;
+  position: THREE.Vector3;
+
   severity: Severity;
 
   tailNumber: string;
@@ -59,6 +61,7 @@ type DamagePoint = {
   length: number;
   width: number;
   depth: number;
+
 };
 
 /* CONFIG */
@@ -84,8 +87,16 @@ const AIRCRAFT_MAP = {
 };
 
 function getColor(s: Severity) {
-  if (s === "high") return "red";
-  if (s === "medium") return "yellow";
+  if (s === "red") return "red";
+  if (s === "orange") return "orange";
+  if (s === "yellow") return "yellow";
+  return "green";
+}
+
+function nextSeverity(s: Severity): Severity {
+  if (s === "green") return "yellow";
+  if (s === "yellow") return "orange";
+  if (s === "orange") return "red";
   return "green";
 }
 
@@ -99,14 +110,18 @@ export default function Page() {
 
   const [image] = useImage(AIRCRAFT_MAP[model][view]);
   const [editMode, setEditMode] = useState(false);
-  const [formData, setFormData] = useState<any>(null);
+  const [formData, setFormData] = useState<unknown>(null);
 
   const [points, setPoints] = useState<DamagePoint[]>([]);
   const [selected, setSelected] = useState<DamagePoint | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [tooltip, setTooltip] = useState<
-    { x: number; y: number; data: DamagePoint } | null
-  >(null);
+  
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+
+  const [tooltip, setTooltip] = useState<{
+    x: number;
+    y: number;
+    data: DamagePoint;
+  } | null>(null);
 
   const stageRef = useRef<Konva.Stage | null>(null);
 
@@ -145,7 +160,7 @@ export default function Page() {
     <AppShell>
       <div className="p-4 space-y-6">
 
-        {/* ✅ HEADER RESTORED */}
+        {/* HEADER RESTORED */}
         <div>
           <h1 className="text-xl font-bold">Damage Mapping</h1>
 
@@ -182,66 +197,52 @@ export default function Page() {
           </div>
         </div>
 
-        {/* ✅ KONVA */}
+        {/* THREE.js Viewer */}
         <div className="flex justify-center">
-          <Stage
-            ref={stageRef}
-            width={WIDTH}
-            height={HEIGHT}
-            onContextMenu={(e) => e.evt.preventDefault()}
+          <AircraftViewer
+            view={view}
+            points={points}
+            selectedIndex={selectedIndex}
 
-            onMouseDown={(e) => {
-              if (e.evt.button !== 2) return;
+            onSelectPoint={(i: number) => {
+              setSelectedIndex(i);
+              setSelected(points[i]);
 
-              e.evt.preventDefault();
-
-              const pos = getPointer();
-
-              const x = (pos.x - offsetX) / imgWidth;
-              const y = (pos.y - offsetY) / imgHeight;
-
-              if (x < 0 || x > 1 || y < 0 || y > 1) return;
-
-              const CLICK_RADIUS = 0.02; // ✅ tolerance (adjust if needed)
-
-              let found = false;
-
-              const updated = points.map((p) => {
-                const dist = Math.sqrt(
-                  (p.x - x) * (p.x - x) + (p.y - y) * (p.y - y)
-                );
-
-                if (dist < CLICK_RADIUS) {
-                  found = true;
-
-                  const nextSeverity: Severity =
-                    p.severity === "low"
-                      ? "medium"
-                      : p.severity === "medium"
-                      ? "high"
-                      : "low";
-
-                  return {
-                    ...p,
-                    severity: nextSeverity,
-                  };
-                }
-
-                return p;
+              setTooltip({
+                x: window.innerWidth - 250,
+                y: window.innerHeight - 120,
+                data: points[i],
               });
+            }}
 
-              if (found) {
-                // ✅ change existing point
-                setPoints(updated);
-              } else {
-                // ✅ create new point
-                setPoints((prev) => [
+            onAddPoint={(pos) => {
+              const CLICK_RADIUS = 3;
+
+              setPoints((prev) => {
+                let foundIndex = -1;
+
+                const updated = prev.map((p, i) => {
+                  const dist = p.position.distanceTo(pos);
+
+                  if (dist < CLICK_RADIUS && foundIndex === -1) {
+                    foundIndex = i;
+                    return {
+                      ...p,
+                      severity: nextSeverity(p.severity),
+                    };
+                  }
+
+                  return p;
+                });
+
+                if (foundIndex !== -1) return updated;
+
+                return [
                   ...prev,
                   {
                     id: `DMG-${Date.now()}`,
-                    x,
-                    y,
-                    severity: "low" as Severity,
+                    position: pos,
+                    severity: "green",
 
                     tailNumber: "SB-021",
                     ataZone: "Zone 500",
@@ -251,71 +252,13 @@ export default function Page() {
                     width: 2,
                     depth: 1,
                   },
-                ]);
-              }
+                ];
+              });
             }}
-            className="bg-gray-50 border"
-          >
-            <Layer>
-              {image && (
-                <KonvaImage
-                  image={image}
-                  x={offsetX}
-                  y={offsetY}
-                  width={imgWidth}
-                  height={imgHeight}
-                />
-              )}
-            </Layer>
-
-            <Layer>
-              {points.map((p) => (
-                <Circle
-                  key={p.id}
-                  x={offsetX + p.x * imgWidth}
-                  y={offsetY + p.y * imgHeight}
-                  radius={selectedId === p.id ? 10 : 6}
-                  fill={getColor(p.severity)}
-                  stroke={selectedId === p.id ? "blue" : "black"}
-                  strokeWidth={2}
-
-                  onClick={(e) => {
-                    if (e.evt.button !== 0) return; // only left click
-                    e.cancelBubble = true;
-
-                    setSelectedId(p.id);
-
-                    const pointer = e.target
-                      .getStage()
-                      ?.getPointerPosition();
-
-                    setTooltip({
-                      x: pointer?.x || 0,
-                      y: pointer?.y || 0,
-                      data: p,
-                    });
-                  }}
-                />
-              ))}
-
-              {tooltip && (
-                <Label x={tooltip.x} y={tooltip.y}>
-                  <Tag fill="black" opacity={0.8} />
-                  <Text
-                    text={`ID: ${tooltip.data.id}
-ATA: ${tooltip.data.ataZone}
-Component: ${tooltip.data.component}`}
-                    fill="white"
-                    padding={6}
-                    fontSize={12}
-                  />
-                </Label>
-              )}
-            </Layer>
-          </Stage>
+          />
         </div>
 
-        {/* ✅ TABLE */}
+        {/* TABLE */}
         <Card>
           <CardContent className="p-0">
             <Table>
@@ -336,20 +279,24 @@ Component: ${tooltip.data.component}`}
               </TableHeader>
 
               <TableBody>
-                {points.map((p) => (
+                {points.map((p, i) => (
                   <TableRow
                     key={p.id}
-                    onClick={() => setSelected(p)}
+                    onClick={() => {
+                      setSelected(p);
+                      setSelectedIndex(i);
+                    }}
                     className={`cursor-pointer ${
-                      selectedId === p.id ? "bg-blue-100" : ""
+                      selectedIndex === i ? "bg-blue-100" : ""
                     }`}
                   >
                     <TableCell>{p.id}</TableCell>
                     <TableCell>{p.tailNumber}</TableCell>
                     <TableCell>{model}</TableCell>
                     <TableCell>{view}</TableCell>
-                    <TableCell>{p.x.toFixed(3)}</TableCell>
-                    <TableCell>{p.y.toFixed(3)}</TableCell>
+                    <TableCell>{p.position.x.toFixed(2)}</TableCell>
+                    <TableCell>{p.position.y.toFixed(2)}</TableCell>
+                    <TableCell>{p.position.z.toFixed(2)}</TableCell>
                     <TableCell>{p.ataZone}</TableCell>
                     <TableCell>{p.component}</TableCell>
                     <TableCell>{p.damageType}</TableCell>
@@ -364,7 +311,7 @@ Component: ${tooltip.data.component}`}
           </CardContent>
         </Card>
 
-        {/* ✅ DIALOG */}
+        {/* DIALOG */}
         <Dialog open={!!selected} onOpenChange={() => setSelected(null)}>
           <DialogContent>
             <DialogHeader>
@@ -382,6 +329,19 @@ Component: ${tooltip.data.component}`}
         </Dialog>
 
       </div>
+      
+      {tooltip && (
+        <div
+          className="fixed bg-black text-white p-2 rounded text-xs shadow"
+          style={{ left: tooltip.x, top: tooltip.y }}
+        >
+          <div>ID: {tooltip.data.id}</div>
+          <div>ATA: {tooltip.data.ataZone}</div>
+          <div>Component: {tooltip.data.component}</div>
+          <div>Severity: {tooltip.data.severity}</div>
+        </div>
+      )}
+
     </AppShell>
   );
 }

@@ -1,247 +1,385 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import {
   Stage,
   Layer,
   Circle,
   Image as KonvaImage,
+  Label,
+  Tag,
+  Text,
 } from "react-konva";
+import Konva from "konva";
 import useImage from "use-image";
 import { AppShell } from "@/components/app-shell";
+
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+
+/* TYPES */
+type Severity = "low" | "medium" | "high";
 
 type DamagePoint = {
   id: string;
   x: number;
   y: number;
-  severity: "low" | "medium" | "high";
+  severity: Severity;
+
+  tailNumber: string;
+  ataZone: string;
+  component: string;
+  damageType: string;
+
+  length: number;
+  width: number;
+  depth: number;
 };
 
-const AIRCRAFT_MODELS = ["SUKHOI", "HORNET"] as const;
+/* CONFIG */
+const VIEWS = ["TOP", "LEFT", "RIGHT", "BOTTOM", "FRONT", "AFT"] as const;
 
 const AIRCRAFT_MAP = {
-  SUKHOI: "/aircraft/su-30-tv.png",
-  HORNET: "/aircraft/hornet-18-tv.png",
+  SUKHOI: {
+    TOP: "/aircraft/su-30-topview.png",
+    LEFT: "/aircraft/su-30-leftsideview.png",
+    RIGHT: "/aircraft/su-30-rightsideview.png",
+    BOTTOM: "/aircraft/su-30-bottomview.png",
+    FRONT: "/aircraft/su-30-frontview.png",
+    AFT: "/aircraft/su-30-aftview.png",
+  },
+  HORNET: {
+    TOP: "/aircraft/hornet-18-topview.png",
+    LEFT: "/aircraft/hornet-18-leftsideview.png",
+    RIGHT: "/aircraft/hornet-18-rightsideview.png",
+    BOTTOM: "/aircraft/hornet-18-bottomview.png",
+    FRONT: "/aircraft/hornet-18-frontview.png",
+    AFT: "/aircraft/hornet-18-aftview.png",
+  },
 };
 
-const DUMMY_DATA = {
-  SUKHOI: [
-    { id: "DMG-001", x: 0.4, y: 0.3, severity: "high" },
-    { id: "DMG-002", x: 0.7, y: 0.5, severity: "medium" },
-  ],
-  HORNET: [
-    { id: "DMG-003", x: 0.5, y: 0.4, severity: "low" },
-  ],
-};
-
-function getColor(s: string) {
+function getColor(s: Severity) {
   if (s === "high") return "red";
   if (s === "medium") return "yellow";
   return "green";
 }
 
-export default function DamageMappingPage() {
+export default function Page() {
   const WIDTH = 900;
   const HEIGHT = 550;
 
-  const [model, setModel] = useState<keyof typeof AIRCRAFT_MAP>("SUKHOI");
-  const [image] = useImage(AIRCRAFT_MAP[model]);
+  const [model, setModel] = useState<"SUKHOI" | "HORNET">("SUKHOI");
+  const [view, setView] =
+    useState<(typeof VIEWS)[number]>("TOP");
 
-  const [points, setPoints] = useState<DamagePoint[]>(
-    DUMMY_DATA[model]
-  );
+  const [image] = useImage(AIRCRAFT_MAP[model][view]);
+  const [editMode, setEditMode] = useState(false);
+  const [formData, setFormData] = useState<any>(null);
 
-  const [scale, setScale] = useState(1);
-  const [pos, setPos] = useState({ x: 0, y: 0 });
-  const [rotation, setRotation] = useState(0);
+  const [points, setPoints] = useState<DamagePoint[]>([]);
+  const [selected, setSelected] = useState<DamagePoint | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [tooltip, setTooltip] = useState<
+    { x: number; y: number; data: DamagePoint } | null
+  >(null);
 
-  // ✅ Fix: keep points in sync when aircraft changes
-  const handleModelChange = (m: keyof typeof AIRCRAFT_MAP) => {
-    setModel(m);
-    setPoints(DUMMY_DATA[m]);
+  const stageRef = useRef<Konva.Stage | null>(null);
+
+  /* IMAGE FIT */
+  let imgWidth = WIDTH;
+  let imgHeight = HEIGHT;
+  let offsetX = 0;
+  let offsetY = 0;
+
+  if (image) {
+    const ratio = image.width / image.height;
+    if (ratio > WIDTH / HEIGHT) {
+      imgWidth = WIDTH;
+      imgHeight = WIDTH / ratio;
+    } else {
+      imgHeight = HEIGHT;
+      imgWidth = HEIGHT * ratio;
+    }
+
+    offsetX = (WIDTH - imgWidth) / 2;
+    offsetY = (HEIGHT - imgHeight) / 2;
+  }
+
+  const getPointer = () => {
+    const stage = stageRef.current;
+    if (!stage) return { x: 0, y: 0 };
+
+    const transform = stage.getAbsoluteTransform().copy();
+    transform.invert();
+    const pos = stage.getPointerPosition();
+    if (!pos) return { x: 0, y: 0 };
+    return transform.point(pos);
   };
 
   return (
     <AppShell>
       <div className="p-4 space-y-6">
 
-        {/* ✅ TITLE */}
+        {/* ✅ HEADER RESTORED */}
         <div>
           <h1 className="text-xl font-bold">Damage Mapping</h1>
 
-          {/* ✅ Aircraft selector */}
-          <select
-            value={model}
-            onChange={(e) => handleModelChange(e.target.value as any)}
-            className="mt-2 border rounded px-3 py-1 text-sm"
-          >
-            {AIRCRAFT_MODELS.map((m) => (
-              <option key={m}>{m}</option>
-            ))}
-          </select>
+          <div className="flex gap-4 mt-3">
+
+            {/* Aircraft Select */}
+            <Select
+              value={model}
+              onValueChange={(v: "SUKHOI" | "HORNET") => setModel(v)}
+            >
+              <SelectTrigger className="w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value="SUKHOI">SUKHOI</SelectItem>
+                  <SelectItem value="HORNET">HORNET</SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+
+            {/* View Buttons */}
+            <div className="flex gap-2 flex-wrap">
+              {VIEWS.map((v) => (
+                <Button
+                  key={v}
+                  variant={view === v ? "default" : "outline"}
+                  onClick={() => setView(v)}
+                >
+                  {v}
+                </Button>
+              ))}
+            </div>
+          </div>
         </div>
 
-        {/* ✅ Controls */}
-        <div className="flex gap-2">
-          <button
-            onClick={() => setRotation(rotation + 90)}
-            className="px-3 py-1 border rounded text-sm"
-          >
-            Rotate
-          </button>
-        </div>
-
-        {/* ✅ KONVA STAGE */}
+        {/* ✅ KONVA */}
         <div className="flex justify-center">
           <Stage
+            ref={stageRef}
             width={WIDTH}
             height={HEIGHT}
-            scaleX={scale}
-            scaleY={scale}
-            x={pos.x}
-            y={pos.y}
-            draggable
+            onContextMenu={(e) => e.evt.preventDefault()}
 
-            // ✅ ZOOM
-            onWheel={(e) => {
+            onMouseDown={(e) => {
+              if (e.evt.button !== 2) return;
+
               e.evt.preventDefault();
-              const scaleBy = 1.1;
-              setScale((prev) =>
-                e.evt.deltaY > 0 ? prev / scaleBy : prev * scaleBy
-              );
+
+              const pos = getPointer();
+
+              const x = (pos.x - offsetX) / imgWidth;
+              const y = (pos.y - offsetY) / imgHeight;
+
+              if (x < 0 || x > 1 || y < 0 || y > 1) return;
+
+              const CLICK_RADIUS = 0.02; // ✅ tolerance (adjust if needed)
+
+              let found = false;
+
+              const updated = points.map((p) => {
+                const dist = Math.sqrt(
+                  (p.x - x) * (p.x - x) + (p.y - y) * (p.y - y)
+                );
+
+                if (dist < CLICK_RADIUS) {
+                  found = true;
+
+                  const nextSeverity: Severity =
+                    p.severity === "low"
+                      ? "medium"
+                      : p.severity === "medium"
+                      ? "high"
+                      : "low";
+
+                  return {
+                    ...p,
+                    severity: nextSeverity,
+                  };
+                }
+
+                return p;
+              });
+
+              if (found) {
+                // ✅ change existing point
+                setPoints(updated);
+              } else {
+                // ✅ create new point
+                setPoints((prev) => [
+                  ...prev,
+                  {
+                    id: `DMG-${Date.now()}`,
+                    x,
+                    y,
+                    severity: "low" as Severity,
+
+                    tailNumber: "SB-021",
+                    ataZone: "Zone 500",
+                    component: "Main Spar",
+                    damageType: "Crack",
+                    length: 12,
+                    width: 2,
+                    depth: 1,
+                  },
+                ]);
+              }
             }}
-
-            // ✅ FIXED CLICK LOCATION
-            onClick={(e) => {
-              const stage = e.target.getStage();
-              const pointer = stage?.getPointerPosition();
-              if (!pointer) return;
-
-              // ✅ IMPORTANT FIX
-              const x = (pointer.x - pos.x) / scale;
-              const y = (pointer.y - pos.y) / scale;
-
-              setPoints([
-                ...points,
-                {
-                  id: `DMG-${Date.now()}`,
-                  x: x / WIDTH,
-                  y: y / HEIGHT,
-                  severity: "low",
-                },
-              ]);
-            }}
-
-            className="bg-white border rounded shadow"
+            className="bg-gray-50 border"
           >
-            {/* ✅ Aircraft */}
             <Layer>
               {image && (
                 <KonvaImage
                   image={image}
-                  width={WIDTH}
-                  height={HEIGHT}
-                  offsetX={WIDTH / 2}
-                  offsetY={HEIGHT / 2}
-                  x={WIDTH / 2}
-                  y={HEIGHT / 2}
-                  rotation={rotation}
+                  x={offsetX}
+                  y={offsetY}
+                  width={imgWidth}
+                  height={imgHeight}
                 />
               )}
             </Layer>
 
-            {/* ✅ Points */}
             <Layer>
-              {points.map((p, i) => (
+              {points.map((p) => (
                 <Circle
                   key={p.id}
-                  x={p.x * WIDTH}
-                  y={p.y * HEIGHT}
-                  radius={8}
+                  x={offsetX + p.x * imgWidth}
+                  y={offsetY + p.y * imgHeight}
+                  radius={selectedId === p.id ? 10 : 6}
                   fill={getColor(p.severity)}
-                  draggable
+                  stroke={selectedId === p.id ? "blue" : "black"}
+                  strokeWidth={2}
 
-                  onDragEnd={(e) => {
-                    const updated = [...points];
+                  onClick={(e) => {
+                    if (e.evt.button !== 0) return; // only left click
+                    e.cancelBubble = true;
 
-                    const px = (e.target.x() - pos.x) / scale;
-                    const py = (e.target.y() - pos.y) / scale;
+                    setSelectedId(p.id);
 
-                    updated[i].x = px / WIDTH;
-                    updated[i].y = py / HEIGHT;
+                    const pointer = e.target
+                      .getStage()
+                      ?.getPointerPosition();
 
-                    setPoints(updated);
+                    setTooltip({
+                      x: pointer?.x || 0,
+                      y: pointer?.y || 0,
+                      data: p,
+                    });
                   }}
                 />
               ))}
+
+              {tooltip && (
+                <Label x={tooltip.x} y={tooltip.y}>
+                  <Tag fill="black" opacity={0.8} />
+                  <Text
+                    text={`ID: ${tooltip.data.id}
+ATA: ${tooltip.data.ataZone}
+Component: ${tooltip.data.component}`}
+                    fill="white"
+                    padding={6}
+                    fontSize={12}
+                  />
+                </Label>
+              )}
             </Layer>
           </Stage>
         </div>
 
         {/* ✅ TABLE */}
-        <div className="overflow-x-auto border rounded">
-          <table className="min-w-[1400px] text-xs">
-            <thead className="bg-gray-100">
-              <tr>
-                <th>Damage_ID</th>
-                <th>Map_View</th>
-                <th>Click_X</th>
-                <th>Click_Y</th>
-                <th>Severity_Color</th>
-                <th>Aircraft_Registration</th>
-                <th>Aircraft_MSN</th>
-                <th>Aircraft_Model</th>
-                <th>ATA_Chapter</th>
-                <th>Fuselage_Station_FS</th>
-                <th>Butt_Line_BL</th>
-                <th>Water_Line_WL</th>
-                <th>Stringer_ID</th>
-                <th>Frame_ID</th>
-                <th>Damage_Type</th>
-                <th>Length_mm</th>
-                <th>Width_mm</th>
-                <th>Depth_mm</th>
-                <th>SRM_Reference</th>
-                <th>Allowable_Limit</th>
-                <th>Severity_Status</th>
-                <th>Maintenance_Action</th>
-                <th>Inspector_ID</th>
-                <th>Date_Logged</th>
-              </tr>
-            </thead>
+        <Card>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Damage ID</TableHead>
+                  <TableHead>Tail No</TableHead>
+                  <TableHead>Model</TableHead>
+                  <TableHead>View</TableHead>
+                  <TableHead>X</TableHead>
+                  <TableHead>Y</TableHead>
+                  <TableHead>ATA Zone</TableHead>
+                  <TableHead>Component</TableHead>
+                  <TableHead>Damage Type</TableHead>
+                  <TableHead>Severity</TableHead>
+                  <TableHead>Size</TableHead>
+                </TableRow>
+              </TableHeader>
 
-            <tbody>
-              {points.map((p) => (
-                <tr key={p.id} className="border-t">
-                  <td>{p.id}</td>
-                  <td>Top</td>
-                  <td>{p.x.toFixed(3)}</td>
-                  <td>{p.y.toFixed(3)}</td>
-                  <td>{getColor(p.severity)}</td>
-                  <td>JHM001</td>
-                  <td>MSN123</td>
-                  <td>{model}</td>
-                  <td>53</td>
-                  <td>---</td>
-                  <td>---</td>
-                  <td>---</td>
-                  <td>---</td>
-                  <td>---</td>
-                  <td>Crack</td>
-                  <td>12</td>
-                  <td>5</td>
-                  <td>2</td>
-                  <td>SRM-53-10</td>
-                  <td>10mm</td>
-                  <td>Repairable</td>
-                  <td>Repair</td>
-                  <td>ENG001</td>
-                  <td>2026-05-19</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              <TableBody>
+                {points.map((p) => (
+                  <TableRow
+                    key={p.id}
+                    onClick={() => setSelected(p)}
+                    className={`cursor-pointer ${
+                      selectedId === p.id ? "bg-blue-100" : ""
+                    }`}
+                  >
+                    <TableCell>{p.id}</TableCell>
+                    <TableCell>{p.tailNumber}</TableCell>
+                    <TableCell>{model}</TableCell>
+                    <TableCell>{view}</TableCell>
+                    <TableCell>{p.x.toFixed(3)}</TableCell>
+                    <TableCell>{p.y.toFixed(3)}</TableCell>
+                    <TableCell>{p.ataZone}</TableCell>
+                    <TableCell>{p.component}</TableCell>
+                    <TableCell>{p.damageType}</TableCell>
+                    <TableCell>{p.severity}</TableCell>
+                    <TableCell>
+                      {p.length} × {p.width} × {p.depth}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+
+        {/* ✅ DIALOG */}
+        <Dialog open={!!selected} onOpenChange={() => setSelected(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Damage Info</DialogTitle>
+            </DialogHeader>
+
+            {selected && (
+              <div className="space-y-2">
+                <p>ID: {selected.id}</p>
+                <p>Component: {selected.component}</p>
+                <p>ATA: {selected.ataZone}</p>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
 
       </div>
     </AppShell>

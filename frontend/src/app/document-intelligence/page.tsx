@@ -235,7 +235,10 @@ export default function DocumentIntelligence() {
     setCurrentDoc(null)
     setStage("upload")
   }
-  const progress = (activeStep / (steps.length - 1)) * 100
+  const progress =
+    activeStep >= steps.length
+      ? 100
+      : (activeStep / steps.length) * 100
   return (
 
     <AppShell>

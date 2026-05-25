@@ -7,12 +7,33 @@ import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 
+type DamagePointLike = {
+  id: string;
+  position: THREE.Vector3;
+  model: "SUKHOI" | "HORNET";
+  view: string;
+  severity: "green" | "yellow" | "orange" | "red";
+  tailNumber: string;
+  ataZone: string;
+  component: string;
+  damageType: string;
+  length: number;
+  width: number;
+  depth: number;
+};
+
+type TooltipPosition = {
+  x: number;
+  y: number;
+};
+
 type Props = {
   view: string;
   onAddPoint: (pos: THREE.Vector3) => void;
-  onSelectPoint: (index: number) => void;
+  onSelectPoint: (index: number, tooltipPosition: TooltipPosition) => void;
   selectedIndex: number | null;
-  points: { position: THREE.Vector3; severity: "green" | "yellow" | "orange" | "red" }[];
+  tooltip: { x: number; y: number; data: DamagePointLike } | null;
+  points: DamagePointLike[];
 };
 
 type ModelProps = {
@@ -64,7 +85,9 @@ function Model({ onAddPoint, setModelRef }: ModelProps) {
 }
 
 type DamagePointsProps = {
-  points: { position: THREE.Vector3; severity: "green" | "yellow" | "orange" | "red" }[];
+  points: DamagePointLike[];
+  selectedIndex: number | null;
+  onSelectPoint: (index: number, tooltipPosition: TooltipPosition) => void;
 };
 
 function getColor(s: string) {
@@ -74,18 +97,29 @@ function getColor(s: string) {
   return "green";
 }
 
-function DamagePoints({ points, selectedIndex, onSelectPoint }: any) {
+function DamagePoints({ points, selectedIndex, onSelectPoint }: DamagePointsProps) {
+  const { camera, size } = useThree();
+
+  const getTooltipPosition = (position: THREE.Vector3) => {
+    const projected = position.clone().project(camera);
+
+    return {
+      x: ((projected.x + 1) / 2) * size.width,
+      y: ((-projected.y + 1) / 2) * size.height,
+    };
+  };
+
   return (
     <>
-      {points.map((p: any, i: number) => (
+      {points.map((p, i) => (
         <mesh
           key={i}
           position={p.position}
 
-          onClick={(e: any) => {
+          onClick={(e: ThreeEvent<MouseEvent>) => {
             if (e.button !== 0) return;
             e.stopPropagation();
-            onSelectPoint(i);
+            onSelectPoint(i, getTooltipPosition(p.position));
           }}
         >
           <sphereGeometry args={[2, 16, 16]} />
@@ -168,18 +202,20 @@ export default function AircraftViewer({
   onAddPoint,
   onSelectPoint,
   selectedIndex,
+  tooltip,
   points,
 }: Props) {
   const modelRef = useRef<THREE.Mesh | null>(null);
   const controlsRef = useRef<OrbitControlsImpl | null>(null);
 
   return (
-    <div className="w-full h-[600px] border rounded">
-      <Canvas onPointerDown={(e) => {
-        if (e.button ===1) {
+    <div className="relative w-full h-[600px] border rounded overflow-visible">
+      <Canvas
+        onPointerDown={(e) => {
+          if (e.button === 1) {
             e.preventDefault(); //Disable autoscroll
-        }
-      }}
+          }
+        }}
       >
         <ambientLight />
         <pointLight position={[10, 10, 10]} />
@@ -210,6 +246,54 @@ export default function AircraftViewer({
           target={[0, 0, 0]}
         />
       </Canvas>
+
+      {tooltip && (
+        <div
+          className="pointer-events-none absolute z-20 min-w-[240px] max-w-[300px] rounded-lg border border-white/10 bg-slate-950/95 px-3 py-2 text-xs text-white shadow-2xl backdrop-blur"
+          style={{
+            left: tooltip.x,
+            top: tooltip.y,
+            transform: "translate(-50%, -110%)",
+          }}
+        >
+          <div className="grid gap-1">
+            <div className="flex justify-between gap-3">
+              <span className="text-white/60">Damage ID</span>
+              <span className="font-medium">{tooltip.data.id}</span>
+            </div>
+            <div className="flex justify-between gap-3">
+              <span className="text-white/60">Tail No</span>
+              <span className="font-medium">{tooltip.data.tailNumber}</span>
+            </div>
+            <div className="flex justify-between gap-3">
+              <span className="text-white/60">View</span>
+              <span className="font-medium">{tooltip.data.view}</span>
+            </div>
+            <div className="flex justify-between gap-3">
+              <span className="text-white/60">ATA Zone</span>
+              <span className="font-medium">{tooltip.data.ataZone}</span>
+            </div>
+            <div className="flex justify-between gap-3">
+              <span className="text-white/60">Component</span>
+              <span className="font-medium">{tooltip.data.component}</span>
+            </div>
+            <div className="flex justify-between gap-3">
+              <span className="text-white/60">Damage Type</span>
+              <span className="font-medium">{tooltip.data.damageType}</span>
+            </div>
+            <div className="flex justify-between gap-3">
+              <span className="text-white/60">Severity</span>
+              <span className="font-medium capitalize">{tooltip.data.severity}</span>
+            </div>
+            <div className="flex justify-between gap-3">
+              <span className="text-white/60">Size</span>
+              <span className="font-medium">
+                {tooltip.data.length} × {tooltip.data.width} × {tooltip.data.depth}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

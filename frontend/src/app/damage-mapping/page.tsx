@@ -1,17 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
-import {
-  Stage,
-  Layer,
-  Circle,
-  Image as KonvaImage,
-  Label,
-  Tag,
-  Text,
-} from "react-konva";
-import Konva from "konva";
-import useImage from "use-image";
+import { useState } from "react";
 import { AppShell } from "@/components/app-shell";
 
 import { Card, CardContent } from "@/components/ui/card";
@@ -38,6 +27,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -46,10 +36,14 @@ import * as THREE from "three";
 
 /* TYPES */
 type Severity = "green" | "yellow" | "orange" | "red";
+type AircraftModel = "SUKHOI" | "HORNET";
+type AircraftView = (typeof VIEWS)[number];
 
 type DamagePoint = {
   id: string;
   position: THREE.Vector3;
+  model: AircraftModel;
+  view: AircraftView;
 
   severity: Severity;
 
@@ -67,32 +61,6 @@ type DamagePoint = {
 /* CONFIG */
 const VIEWS = ["TOP", "LEFT", "RIGHT", "BOTTOM", "FRONT", "AFT"] as const;
 
-const AIRCRAFT_MAP = {
-  SUKHOI: {
-    TOP: "/aircraft/su-30-topview.png",
-    LEFT: "/aircraft/su-30-leftsideview.png",
-    RIGHT: "/aircraft/su-30-rightsideview.png",
-    BOTTOM: "/aircraft/su-30-bottomview.png",
-    FRONT: "/aircraft/su-30-frontview.png",
-    AFT: "/aircraft/su-30-aftview.png",
-  },
-  HORNET: {
-    TOP: "/aircraft/hornet-18-topview.png",
-    LEFT: "/aircraft/hornet-18-leftsideview.png",
-    RIGHT: "/aircraft/hornet-18-rightsideview.png",
-    BOTTOM: "/aircraft/hornet-18-bottomview.png",
-    FRONT: "/aircraft/hornet-18-frontview.png",
-    AFT: "/aircraft/hornet-18-aftview.png",
-  },
-};
-
-function getColor(s: Severity) {
-  if (s === "red") return "red";
-  if (s === "orange") return "orange";
-  if (s === "yellow") return "yellow";
-  return "green";
-}
-
 function nextSeverity(s: Severity): Severity {
   if (s === "green") return "yellow";
   if (s === "yellow") return "orange";
@@ -101,16 +69,8 @@ function nextSeverity(s: Severity): Severity {
 }
 
 export default function Page() {
-  const WIDTH = 900;
-  const HEIGHT = 550;
-
-  const [model, setModel] = useState<"SUKHOI" | "HORNET">("SUKHOI");
-  const [view, setView] =
-    useState<(typeof VIEWS)[number]>("TOP");
-
-  const [image] = useImage(AIRCRAFT_MAP[model][view]);
-  const [editMode, setEditMode] = useState(false);
-  const [formData, setFormData] = useState<unknown>(null);
+  const [model, setModel] = useState<AircraftModel>("SUKHOI");
+  const [view, setView] = useState<AircraftView>("TOP");
 
   const [points, setPoints] = useState<DamagePoint[]>([]);
   const [selected, setSelected] = useState<DamagePoint | null>(null);
@@ -122,39 +82,6 @@ export default function Page() {
     y: number;
     data: DamagePoint;
   } | null>(null);
-
-  const stageRef = useRef<Konva.Stage | null>(null);
-
-  /* IMAGE FIT */
-  let imgWidth = WIDTH;
-  let imgHeight = HEIGHT;
-  let offsetX = 0;
-  let offsetY = 0;
-
-  if (image) {
-    const ratio = image.width / image.height;
-    if (ratio > WIDTH / HEIGHT) {
-      imgWidth = WIDTH;
-      imgHeight = WIDTH / ratio;
-    } else {
-      imgHeight = HEIGHT;
-      imgWidth = HEIGHT * ratio;
-    }
-
-    offsetX = (WIDTH - imgWidth) / 2;
-    offsetY = (HEIGHT - imgHeight) / 2;
-  }
-
-  const getPointer = () => {
-    const stage = stageRef.current;
-    if (!stage) return { x: 0, y: 0 };
-
-    const transform = stage.getAbsoluteTransform().copy();
-    transform.invert();
-    const pos = stage.getPointerPosition();
-    if (!pos) return { x: 0, y: 0 };
-    return transform.point(pos);
-  };
 
   return (
     <AppShell>
@@ -203,14 +130,14 @@ export default function Page() {
             view={view}
             points={points}
             selectedIndex={selectedIndex}
+            tooltip={tooltip}
 
-            onSelectPoint={(i: number) => {
+            onSelectPoint={(i: number, position) => {
               setSelectedIndex(i);
-              setSelected(points[i]);
 
               setTooltip({
-                x: window.innerWidth - 250,
-                y: window.innerHeight - 120,
+                x: position.x,
+                y: position.y,
                 data: points[i],
               });
             }}
@@ -242,6 +169,8 @@ export default function Page() {
                   {
                     id: `DMG-${Date.now()}`,
                     position: pos,
+                    model,
+                    view,
                     severity: "green",
 
                     tailNumber: "SB-021",
@@ -270,6 +199,7 @@ export default function Page() {
                   <TableHead>View</TableHead>
                   <TableHead>X</TableHead>
                   <TableHead>Y</TableHead>
+                  <TableHead>Z</TableHead>
                   <TableHead>ATA Zone</TableHead>
                   <TableHead>Component</TableHead>
                   <TableHead>Damage Type</TableHead>
@@ -292,8 +222,8 @@ export default function Page() {
                   >
                     <TableCell>{p.id}</TableCell>
                     <TableCell>{p.tailNumber}</TableCell>
-                    <TableCell>{model}</TableCell>
-                    <TableCell>{view}</TableCell>
+                    <TableCell>{p.model}</TableCell>
+                    <TableCell>{p.view}</TableCell>
                     <TableCell>{p.position.x.toFixed(2)}</TableCell>
                     <TableCell>{p.position.y.toFixed(2)}</TableCell>
                     <TableCell>{p.position.z.toFixed(2)}</TableCell>
@@ -313,34 +243,124 @@ export default function Page() {
 
         {/* DIALOG */}
         <Dialog open={!!selected} onOpenChange={() => setSelected(null)}>
-          <DialogContent>
+          <DialogContent className="w-[95vw] max-w-4xl p-6">
             <DialogHeader>
-              <DialogTitle>Damage Info</DialogTitle>
+              <DialogTitle>Damage Mapping Detail</DialogTitle>
+              <DialogDescription>
+                Detailed information about the selected damage instance.
+              </DialogDescription>
             </DialogHeader>
 
             {selected && (
-              <div className="space-y-2">
-                <p>ID: {selected.id}</p>
-                <p>Component: {selected.component}</p>
-                <p>ATA: {selected.ataZone}</p>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="rounded-lg border p-4">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                    Damage ID
+                  </p>
+                  <p className="mt-1 text-lg font-semibold">{selected.id}</p>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    {selected.damageType}
+                  </p>
+                </div>
+
+                <div className="rounded-lg border p-4">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                    Size
+                  </p>
+                  <p className="mt-1 text-lg font-semibold">
+                    {selected.length} × {selected.width} × {selected.depth}
+                  </p>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Length × Width × Depth
+                  </p>
+                </div>
+
+                <div className="grid gap-3 md:col-span-2 md:grid-cols-2 lg:grid-cols-4">
+                  <div className="rounded-lg border p-4">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                      Tail No
+                    </p>
+                    <p className="mt-1 font-medium">{selected.tailNumber}</p>
+                  </div>
+                  <div className="rounded-lg border p-4">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                      Model
+                    </p>
+                    <p className="mt-1 font-medium">{selected.model}</p>
+                  </div>
+                  <div className="rounded-lg border p-4">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                      View
+                    </p>
+                    <p className="mt-1 font-medium">{selected.view}</p>
+                  </div>
+                  <div className="rounded-lg border p-4">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                      Severity
+                    </p>
+                    <p className="mt-1 font-medium capitalize">{selected.severity}</p>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border p-4 md:col-span-2">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                    Location and Classification
+                  </p>
+
+                  <div className="mt-4 grid gap-4 sm:grid-cols-3">
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                        X
+                      </p>
+                      <p className="mt-1 font-medium">
+                        {selected.position.x.toFixed(2)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                        Y
+                      </p>
+                      <p className="mt-1 font-medium">
+                        {selected.position.y.toFixed(2)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                        Z
+                      </p>
+                      <p className="mt-1 font-medium">
+                        {selected.position.z.toFixed(2)}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                        ATA Zone
+                      </p>
+                      <p className="mt-1 font-medium">{selected.ataZone}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                        Component
+                      </p>
+                      <p className="mt-1 font-medium">{selected.component}</p>
+                    </div>
+                    <div className="sm:col-span-2">
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                        Damage Type
+                      </p>
+                      <p className="mt-1 font-medium">{selected.damageType}</p>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
           </DialogContent>
         </Dialog>
 
       </div>
-      
-      {tooltip && (
-        <div
-          className="fixed bg-black text-white p-2 rounded text-xs shadow"
-          style={{ left: tooltip.x, top: tooltip.y }}
-        >
-          <div>ID: {tooltip.data.id}</div>
-          <div>ATA: {tooltip.data.ataZone}</div>
-          <div>Component: {tooltip.data.component}</div>
-          <div>Severity: {tooltip.data.severity}</div>
-        </div>
-      )}
 
     </AppShell>
   );

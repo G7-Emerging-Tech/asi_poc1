@@ -1,4 +1,4 @@
-import { Activity, AlertTriangle, Bot, ClipboardList, FileSearch, FileText, Gauge, LayoutDashboard, Map, ShieldCheck, Users } from "lucide-react";
+import { Activity, AlertTriangle, BarChart3, Bot, ClipboardList, Eye, FileBarChart, FileSearch, FileText, Gauge, LayoutDashboard, LineChart, Map, Plane, PlaneTakeoff, ShieldCheck, Users, Wrench } from "lucide-react";
 
 export const SIDEBAR_NAV = [
     {
@@ -9,11 +9,6 @@ export const SIDEBAR_NAV = [
                 label: "Fleet Dashboard",
                 icon: LayoutDashboard,
             },
-            // {
-            //     path: "",
-            //     label: "Active Alerts",
-            //     icon: AlertTriangle,
-            // },
         ],
     },
     {
@@ -25,9 +20,29 @@ export const SIDEBAR_NAV = [
                 icon: ClipboardList,
             },
             {
+                path: "/fleet-utilization",
+                label: "Fleet Utilization",
+                icon: PlaneTakeoff,
+            },
+            {
                 path: "/condition-data",
                 label: "Condition Data",
                 icon: Activity,
+            },
+        ],
+    },
+    {
+        label: "Flight Data",
+        items: [
+            {
+                path: "/flight-data",
+                label: "Flight Log & G Exceedance",
+                icon: Plane,
+            },
+            {
+                path: "/strain-monitoring",
+                label: "Strain Gauge Monitor",
+                icon: LineChart,
             },
         ],
     },
@@ -40,9 +55,14 @@ export const SIDEBAR_NAV = [
                 icon: Gauge,
             },
             {
-                path: "/damage-mapping",
-                label: "Damage Mapping",
-                icon: Map,
+                path: "/defect-analytics",
+                label: "Defect Analytics",
+                icon: AlertTriangle,
+            },
+            {
+                path: "/slep",
+                label: "SLEP (Life Extension)",
+                icon: Wrench,
             },
         ],
     },

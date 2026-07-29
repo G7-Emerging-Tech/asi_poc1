@@ -1,0 +1,264 @@
+generator client {
+  provider             = "prisma-client-py"
+  interface            = "asyncio"
+  recursive_type_depth = "5"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// =========== 1. AIRCRAFT REGISTRY ===========
+model AircraftRegistry {
+  id                   Int      @id @default(autoincrement())
+  tailId               String   @unique @map("tail_id")          // AC-01, AC-02, etc.
+  buno                 String?  @map("buno")                     // 165207, 165219
+  acType               String   @default("F/A-18D") @map("ac_type")
+  status               String   @default("operational")          // operational | maintenance | restricted
+  totalAfh             Float    @default(0) @map("total_afh")
+  afhPrevPeriod        Float?   @map("afh_prev_period")
+  afhAnnualIncrement   Float?   @map("afh_annual_increment")
+  designLifeLimitAfh   Int      @default(6000) @map("design_life_limit_afh")
+  pwdYear              Int?     @map("pwd_year")
+  lpm12yCompleted      Boolean  @default(false) @map("lpm12y_completed")
+  lpm12yInductionAfh   Float?   @map("lpm12y_induction_afh")
+  lpm12yDateIn         String?  @map("lpm12y_date_in")
+  lpm12yDateOut        String?  @map("lpm12y_date_out")
+  nextServicingPmi2    String?  @map("next_servicing_pmi2")
+  engineLhSn           String?  @map("engine_lh_sn")
+  engineLhAfh          Float?   @map("engine_lh_afh")
+  engineRhSn           String?  @map("engine_rh_sn")
+  engineRhAfh          Float?   @map("engine_rh_afh")
+  yearsInService       Int?     @map("years_in_service")
+  strainGaugeStatus    String?  @map("strain_gauge_status")
+  totalDefectsCum      Int      @default(0) @map("total_defects_cumulative")
+  defectsLatestCycle   Int      @default(0) @map("defects_latest_cycle")
+  corrosionsLatestCycle Int     @default(0) @map("corrosions_latest_cycle")
+  lifePercentConsumed  Float?   @map("life_percent_consumed")
+  slepLimitAfh         Float?   @map("slep_limit_afh")           // SLEP reduced limit if applicable
+  notes                String?  @map("notes")
+
+  flights           FlightData[]
+  fatigueEntries    FatigueLifeIndex[]
+  missionContribs   MissionSeverityContribution[]
+  defects           DefectNcrd[]
+  corrosions        CorrosionFinding[]
+  conditionReports  AircraftConditionReport[]
+  slepRecords       SlepRecord[]
+
+  @@map("aircraft_registry")
+}
+
+// =========== 2. FLIGHT DATA (Per-Mission Recorded Data) ===========
+model FlightData {
+  id               Int      @id @default(autoincrement())
+  stripNumber      String   @unique @map("strip_number")
+  aircraftId       String   @map("aircraft_id")
+  flightDate       DateTime @map("flight_date")
+  missionType      String?  @map("mission_type")
+  profile          String?  @map("profile")
+  maxG             Float?   @map("max_g")
+  maxWingBending   Float?   @map("max_wing_bending_in_lb")
+  gOcc4to5         Int?     @default(0) @map("g_occ_4_to_5")
+  gOcc5to6         Int?     @default(0) @map("g_occ_5_to_6")
+  gOcc6to7         Int?     @default(0) @map("g_occ_6_to_7")
+  gOcc7to8         Int?     @default(0) @map("g_occ_7_to_8")
+  strainWingRt     Int?     @map("strain_wing_rt")
+  strainWingFold   Int?     @map("strain_wing_fold")
+  strainFwdFuse    Int?     @map("strain_fwd_fuse")
+  strainLHorz      Int?     @map("strain_l_horz")
+  strainRHorz      Int?     @map("strain_r_horz")
+  strainLVert      Int?     @map("strain_l_vert")
+  strainRVert      Int?     @map("strain_r_vert")
+  maxTrueAirSpeed  Float?   @map("max_true_air_speed_kts")
+  flightHours      Float?   @map("flight_hours")
+
+  aircraft AircraftRegistry @relation(fields: [aircraftId], references: [tailId])
+
+  @@map("flight_data")
+}
+
+// =========== 3. FATIGUE LIFE INDEX (Per Aircraft, Per Period) ===========
+model FatigueLifeIndex {
+  id                Int      @id @default(autoincrement())
+  aircraftId        String   @map("aircraft_id")
+  periodStart       DateTime? @map("period_start")
+  periodEnd         DateTime? @map("period_end")
+  wrFleiCurrent     Float?   @map("wr_flei_current")
+  wfFleiCurrent     Float?   @map("wf_flei_current")
+  wrFleiAnnualDelta Float?   @map("wr_flei_annual_delta")
+  usageGradient     Float?   @map("usage_gradient")
+  estFleiAt6000Afh  Float?   @map("est_flei_at_6000_afh")
+  estYearFlei1      Int?     @map("est_year_flei_equals_1")
+  estAfhAtFlei1     Float?   @map("est_afh_at_flei_equals_1")
+
+  aircraft AircraftRegistry @relation(fields: [aircraftId], references: [tailId])
+
+  @@map("fatigue_life_index")
+}
+
+// =========== 4. MISSION SEVERITY / OPC CONTRIBUTION ===========
+model MissionSeverityContribution {
+  id              Int     @id @default(autoincrement())
+  aircraftId      String  @map("aircraft_id")
+  opcCode         String  @map("opc_code")
+  missionTypeName String? @map("mission_type_name")
+  missionsCount   Int?    @map("missions_count")
+  avgFleiPerMission Float? @map("avg_flei_per_mission")
+  wrFleiSum       Float?  @map("wr_flei_sum")
+  percentOfTotal  String? @map("percent_of_total")
+
+  aircraft AircraftRegistry @relation(fields: [aircraftId], references: [tailId])
+
+  @@map("mission_severity_contribution")
+}
+
+// =========== 5. DEFECTS / NCRD ===========
+model DefectNcrd {
+  id               Int     @id @default(autoincrement())
+  ncrdRef          String  @unique @map("ncrd_ref")
+  aircraftId       String  @map("aircraft_id")
+  title            String? @map("title")
+  location         String? @map("location")
+  type             String? @map("type")            // Crack / Corrosion / Repair
+  partNumber       String? @map("part_number")
+  dateFound        String? @map("date_found")
+  severity         String  @default("major")       // critical | major | minor
+  status           String? @map("status")
+  asdrNumber       String? @map("asdr_number")
+  description      String? @map("description")
+  fleetWide        String  @default("No") @map("fleet_wide")    // Yes | No | Possible
+  criticalStructure Boolean @default(false) @map("critical_structure")
+  isBlackLineEntry  Boolean @default(false) @map("is_black_line_entry")
+  blackLineWarning String? @map("black_line_warning")
+  engineeringOrder String? @map("engineering_order")
+  draft            Boolean @default(false)
+  verified         Boolean @default(false)
+  approved         Boolean @default(false)
+
+  aircraft AircraftRegistry @relation(fields: [aircraftId], references: [tailId])
+
+  @@map("defect_ncrd")
+}
+
+// =========== 6. CORROSION FINDINGS ===========
+model CorrosionFinding {
+  id          Int     @id @default(autoincrement())
+  corrosionId String  @unique @map("corrosion_id")   // C001-C007
+  aircraftId  String  @map("aircraft_id")
+  location    String? @map("location")
+  description String? @map("description")
+  asdrNumber  String? @map("asdr_number")
+  dateFound   String? @map("date_found")
+  grade       String? @map("grade")                  // Grade 2, Grade 3, Grade 4
+
+  aircraft AircraftRegistry @relation(fields: [aircraftId], references: [tailId])
+
+  @@map("corrosion_finding")
+}
+
+// =========== 7. AIRCRAFT CONDITION REPORTS (LPM12Y) ===========
+model AircraftConditionReport {
+  id                    Int     @id @default(autoincrement())
+  reportId              String  @unique @map("report_id")
+  aircraftId            String  @map("aircraft_id")
+  reportType            String? @map("report_type")     // LPM12Y ACR, Annual
+  reportDate            String? @map("report_date")
+  programme             String? @map("programme")
+  dateIn                String? @map("date_in")
+  dateOut               String? @map("date_out")
+  totalTaskCards        Int?    @map("total_task_cards")
+  surfaceFindingsTotal  Int?    @map("surface_findings_total")
+  surfaceTreatmentCount Int?    @map("surface_treatment_count")
+  repairCount           Int?    @map("repair_count")
+  partReplacementCount  Int?    @map("part_replacement_count")
+  ncrdTotal             Int?    @map("ncrd_total")
+  ncrdIncorporated      Int?    @map("ncrd_incorporated")
+  ncrdOnHold            Int?    @map("ncrd_on_hold")
+  ncrdSignificant       Int?    @map("ncrd_significant")
+  ncrdBlackLine         Int?    @map("ncrd_black_line")
+  ewisFindings          String? @map("ewis_findings")
+  mlgNote               String? @map("mlg_note")
+  fuelLeaksStatus       String? @map("fuel_leaks_status")
+  hydraulicLeaksStatus  String? @map("hydraulic_leaks_status")
+  weighingStatus        String? @map("weighing_status")
+  recommendations       String? @map("recommendations")  // JSON string
+
+  aircraft AircraftRegistry @relation(fields: [aircraftId], references: [tailId])
+
+  @@map("aircraft_condition_report")
+}
+
+// =========== 8. ENGINEERING REPORTS ===========
+model EngineeringReport {
+  id            Int      @id @default(autoincrement())
+  reportRef     String   @unique @map("report_reference")
+  title         String?  @map("title")
+  type          String?  @map("type")
+  status        String?  @map("status")        // Submitted | Reviewed | Approved | Accepted
+  reportDate    String?  @map("report_date")
+  docHeader     String?  @map("document_header")
+  sections      String?  @map("sections")       // JSON string
+  docFooter     String?  @map("document_footer")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@map("engineering_report")
+}
+
+// =========== 9. SLEP RECORDS (Service Life Extension Program) ===========
+model SlepRecord {
+  id          Int     @id @default(autoincrement())
+  aircraftId  String  @map("aircraft_id")
+  slepRef     String  @unique @map("slep_reference")
+  originalLimit Float? @map("original_limit_afh")
+  extendedLimit Float? @map("extended_limit_afh")
+  approvalDate String? @map("approval_date")
+  status      String? @map("status")           // Pending | Approved | In Progress | Completed
+  notes       String? @map("notes")
+
+  aircraft AircraftRegistry @relation(fields: [aircraftId], references: [tailId])
+
+  @@map("slep_record")
+}
+
+// =========== 10. AUDIT TRAIL ===========
+model AuditTrail {
+  id          Int      @id @default(autoincrement())
+  timestamp   DateTime @default(now())
+  userName    String?  @map("user_name")
+  userRole    String?  @map("user_role")
+  action      String?  @map("action")          // CREATE | VERIFY | APPROVE | IMPORT | UPDATE
+  record      String?  @map("record")
+  changeDesc  String?  @map("change_description")
+
+  @@map("audit_trail")
+}
+
+// =========== 11. INGESTED DOCUMENTS (Document Intelligence) ===========
+model IngestedDocument {
+  id               Int      @id @default(autoincrement())
+  docId            String   @unique @map("doc_id")
+  filename         String?  @map("filename")
+  fileType         String?  @map("file_type")   // pdf | excel | word
+  fileSize         String?  @map("file_size")
+  uploadDate       DateTime @default(now()) @map("upload_date")
+  pageCount        Int?     @map("page_count")
+  entityCount      Int?     @map("entity_count")
+  status           String   @default("unindexed") // indexed | unindexed
+  extractedEntities String? @map("extracted_entities")  // JSON
+
+  @@map("ingested_document")
+}
+
+// =========== 12. USERS ===========
+model User {
+  id        Int     @id @default(autoincrement())
+  username  String  @unique
+  email     String  @unique
+  password  String
+  role      String  @default("viewer")  // admin | engineer | viewer
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("users")
+}

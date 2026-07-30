@@ -257,7 +257,7 @@ model User {
   username  String  @unique
   email     String  @unique
   password  String
-  role      String  @default("viewer")  // admin | engineer | viewer
+  role      String  @default("Auditor")  // ASI Manager | ASI Engineer | Analyst | Auditor
   createdAt DateTime @default(now()) @map("created_at")
 
   @@map("users")

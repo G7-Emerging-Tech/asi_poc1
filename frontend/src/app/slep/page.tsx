@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect } from "react"
 import { AppShell } from "@/components/app-shell"
 import {
   Table,
@@ -10,7 +10,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 
@@ -32,6 +31,11 @@ interface AircraftRecord {
   designLifeLimitAfh: number
   slepLimitAfh?: number
   lifePercentConsumed?: number
+  notes?: string
+}
+
+interface FatigueRecord {
+  aircraftId: string
   estYearFlei1?: number
 }
 
@@ -40,34 +44,86 @@ const API = "http://localhost:8000/api"
 export default function SlePage() {
   const [aircraft, setAircraft] = useState<AircraftRecord[]>([])
   const [slepRecords, setSlepRecords] = useState<SlepRecord[]>([])
+  const [fatigue, setFatigue] = useState<FatigueRecord[]>([])
   const [loading, setLoading] = useState(true)
 
-  const fetchData = useCallback(async () => {
-    setLoading(true)
-    try {
-      const [acRes, slepRes] = await Promise.all([
-        fetch(`${API}/aircraft`),
-        fetch(`${API}/slep`),
-      ])
-      setAircraft(await acRes.json())
-      setSlepRecords(await slepRes.json())
-    } catch (e) {
-      console.error("Failed to fetch:", e)
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const fetchData = async () => {
+        setLoading(true)
+        try {
+          const [acRes, slepRes, fatigueRes] = await Promise.all([
+            fetch(`${API}/aircraft`),
+            fetch(`${API}/slep`),
+            fetch(`${API}/fatigue`),
+          ])
+          setAircraft(await acRes.json())
+          setSlepRecords(await slepRes.json())
+          setFatigue(await fatigueRes.json())
+        } catch (e) {
+          console.error("Failed to fetch:", e)
+        } finally {
+          setLoading(false)
+        }
+      }
 
-  useEffect(() => { fetchData() }, [fetchData])
+      void fetchData()
+    }, 0)
+
+    return () => window.clearTimeout(timer)
+  }, [])
 
   const getSlepForAircraft = (tailId: string) => {
     return slepRecords.filter((s) => s.aircraftId === tailId)
   }
 
-  // AC-03 and AC-04 have reduced life limits per FA-18D report
-  const slepCandidates = aircraft.filter(
-    (a) => a.tailId === "AC-03" || a.tailId === "AC-04"
-  )
+  const isSlepCandidate = (a: AircraftRecord) => {
+    const designLimit = a.designLifeLimitAfh || 6000
+    const lifeRatio = designLimit > 0 ? (a.totalAfh || 0) / designLimit : 0
+    return Boolean(
+      a.slepLimitAfh ||
+      (a.lifePercentConsumed || 0) >= 85 ||
+      lifeRatio >= 0.85
+    )
+  }
+
+  const slepCandidates = aircraft.filter(isSlepCandidate)
+  const slepByAircraft = new Map<string, SlepRecord[]>()
+  for (const record of slepRecords) {
+    const records = slepByAircraft.get(record.aircraftId) || []
+    records.push(record)
+    slepByAircraft.set(record.aircraftId, records)
+  }
+  const fatigueByAircraft = new Map(fatigue.map((f) => [f.aircraftId, f]))
+
+  const recommendationCards = [
+    ...slepCandidates.map((a) => {
+      const records = slepByAircraft.get(a.tailId) || []
+      const hasApproved = records.some((s) => s.status?.toLowerCase() === "approved")
+      const designLimit = a.designLifeLimitAfh || 6000
+      const lifeRatio = designLimit > 0 ? ((a.totalAfh || 0) / designLimit) * 100 : 0
+
+      return {
+        title: hasApproved
+          ? `${a.tailId}: SLEP record uploaded`
+          : `${a.tailId}: SLEP review candidate`,
+        body: [
+          `Current AFH ${a.totalAfh?.toLocaleString() ?? "-"} / design limit ${designLimit.toLocaleString()} hr (${lifeRatio.toFixed(0)}%).`,
+          a.slepLimitAfh ? `Uploaded SLEP/reduced limit: ${a.slepLimitAfh.toLocaleString()} hr.` : null,
+          a.lifePercentConsumed ? `Life consumed: ${a.lifePercentConsumed}%.` : null,
+          records.length > 0 ? `SLEP record status: ${records.map((s) => s.status || "Not recorded").join(", ")}.` : "No SLEP record uploaded yet.",
+        ].filter(Boolean).join(" "),
+        color: hasApproved ? "border-l-green-500 bg-green-50" : "border-l-blue-500 bg-blue-50",
+      }
+    }),
+    ...slepRecords
+      .filter((s) => !slepCandidates.some((a) => a.tailId === s.aircraftId))
+      .map((s) => ({
+        title: `${s.aircraftId}: SLEP record available`,
+        body: `${s.slepRef} is ${s.status || "status not recorded"}${s.extendedLimit ? ` with extended limit ${s.extendedLimit.toLocaleString()} hr` : ""}. ${s.notes || ""}`.trim(),
+        color: "border-l-green-500 bg-green-50",
+      })),
+  ]
 
   return (
     <AppShell>
@@ -75,7 +131,7 @@ export default function SlePage() {
         <div>
           <h2 className="font-bold text-lg">Service Life Extension Program (SLEP)</h2>
           <p className="text-xs text-muted-foreground">
-            Aircraft with reduced life limits — SLEP options per Ref F · Design life: 6,000 AFH
+            Aircraft life status, uploaded SLEP limits, and service-life recommendations from database records
           </p>
         </div>
 
@@ -98,23 +154,30 @@ export default function SlePage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {aircraft.map((a) => {
+                {aircraft.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="py-6 text-center text-muted-foreground">
+                      {loading ? "Loading fleet life status..." : "No aircraft records found. Upload Aircraft Registry data via Document Intelligence."}
+                    </TableCell>
+                  </TableRow>
+                ) : aircraft.map((a) => {
                   const sleps = getSlepForAircraft(a.tailId)
                   const hasSlep = sleps.length > 0
+                  const fatigueRecord = fatigueByAircraft.get(a.tailId)
                   return (
-                    <TableRow key={a.tailId} className={slepCandidates.includes(a) ? "bg-yellow-50" : ""}>
+                    <TableRow key={a.tailId} className={isSlepCandidate(a) ? "bg-yellow-50" : ""}>
                       <TableCell className="font-semibold">{a.tailId}</TableCell>
                       <TableCell>{a.totalAfh?.toLocaleString()}</TableCell>
                       <TableCell>{a.designLifeLimitAfh?.toLocaleString()}</TableCell>
                       <TableCell className={a.slepLimitAfh ? "text-red-600 font-bold" : ""}>
-                        {a.slepLimitAfh ? `${a.slepLimitAfh.toLocaleString()} hr` : "6,000 hr"}
+                        {a.slepLimitAfh ? `${a.slepLimitAfh.toLocaleString()} hr` : `${a.designLifeLimitAfh?.toLocaleString() || "-"} hr`}
                       </TableCell>
                       <TableCell>
                         <span className={a.lifePercentConsumed && a.lifePercentConsumed > 85 ? "text-red-600 font-bold" : ""}>
                           {a.lifePercentConsumed ? `${a.lifePercentConsumed}%` : "-"}
                         </span>
                       </TableCell>
-                      <TableCell>{a.estYearFlei1 || "-"}</TableCell>
+                      <TableCell>{fatigueRecord?.estYearFlei1 || "-"}</TableCell>
                       <TableCell>
                         {hasSlep ? (
                           <Badge className="bg-green-100 text-green-700 border-green-300">SLEP Applied</Badge>
@@ -139,7 +202,7 @@ export default function SlePage() {
           </p>
           {slepRecords.length === 0 ? (
             <p className="text-xs text-muted-foreground py-4 text-center">
-              No SLEP records found. Aircraft AC-03 (5,134.2 hr limit) and AC-04 (5,549.0 hr limit) are candidates.
+              {loading ? "Loading SLEP records..." : "No SLEP records found in the uploaded database data."}
             </p>
           ) : (
             <div className="overflow-auto">
@@ -186,22 +249,22 @@ export default function SlePage() {
         {/* Action Card */}
         <Card className="border-t-4 border-t-orange-500 p-4">
           <p className="text-xs font-semibold text-muted-foreground uppercase mb-2">
-            Recommendations (from FA-18D Annual Report)
+            Recommendations (from Uploaded Database Records)
           </p>
-          <div className="space-y-2">
-            <div className="rounded-lg border p-3 border-l-4 border-l-blue-500 bg-blue-50">
-              <p className="text-xs font-semibold">R1: Initiate SLEP review for AC-03 (5,134.2 hr limit)</p>
-              <p className="text-[10px] text-muted-foreground">AC-03 has reduced life limit per applicable Service Bulletin. SLEP available per Ref F.</p>
+          {recommendationCards.length === 0 ? (
+            <p className="py-4 text-center text-xs text-muted-foreground">
+              No SLEP recommendations available. Upload Aircraft Registry and/or SLEP records via Document Intelligence.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {recommendationCards.map((recommendation, index) => (
+                <div key={`${recommendation.title}-${index}`} className={`rounded-lg border p-3 border-l-4 ${recommendation.color}`}>
+                  <p className="text-xs font-semibold">R{index + 1}: {recommendation.title}</p>
+                  <p className="text-[10px] text-muted-foreground">{recommendation.body}</p>
+                </div>
+              ))}
             </div>
-            <div className="rounded-lg border p-3 border-l-4 border-l-blue-500 bg-blue-50">
-              <p className="text-xs font-semibold">R2: Initiate SLEP review for AC-04 (5,549.0 hr limit)</p>
-              <p className="text-[10px] text-muted-foreground">AC-04 has reduced life limit. SLEP available per Ref F to extend operational service.</p>
-            </div>
-            <div className="rounded-lg border p-3 border-l-4 border-l-green-500 bg-green-50">
-              <p className="text-xs font-semibold">R3: Reduce AC-01 annual AFH; increase AC-05 to equalise fleet fatigue distribution</p>
-              <p className="text-[10px] text-muted-foreground">Better distribution of flight hours across fleet will extend overall fleet life.</p>
-            </div>
-          </div>
+          )}
         </Card>
       </div>
     </AppShell>

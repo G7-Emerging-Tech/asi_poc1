@@ -32,9 +32,23 @@ interface FlightRecord {
   maxG?: number
 }
 
+interface AircraftRecord {
+  tailId: string
+  strainGaugeStatus?: string
+}
+
+type StrainGaugeKey =
+  | "strainWingRt"
+  | "strainWingFold"
+  | "strainFwdFuse"
+  | "strainLHorz"
+  | "strainRHorz"
+  | "strainLVert"
+  | "strainRVert"
+
 const API = "http://localhost:8000/api"
 
-const STRAIN_GAUGE_NAMES: Record<string, string> = {
+const STRAIN_GAUGE_NAMES: Record<StrainGaugeKey, string> = {
   strainWingRt: "Wing Root (µε)",
   strainWingFold: "Wing Fold (µε)",
   strainFwdFuse: "Fwd Fuselage (µε)",
@@ -44,7 +58,7 @@ const STRAIN_GAUGE_NAMES: Record<string, string> = {
   strainRVert: "R Vert Tail (µε)",
 }
 
-const STRAIN_GAUGE_COLORS: Record<string, string> = {
+const STRAIN_GAUGE_COLORS: Record<StrainGaugeKey, string> = {
   strainWingRt: "#ef4444",
   strainWingFold: "#f97316",
   strainFwdFuse: "#eab308",
@@ -56,12 +70,30 @@ const STRAIN_GAUGE_COLORS: Record<string, string> = {
 
 export default function StrainMonitoringPage() {
   const [flights, setFlights] = useState<FlightRecord[]>([])
+  const [aircraft, setAircraft] = useState<AircraftRecord[]>([])
   const [aircraftFilter, setAircraftFilter] = useState("all")
-  const [selectedGauges, setSelectedGauges] = useState<Record<string, boolean>>({
+  const [selectedGauges, setSelectedGauges] = useState<Record<StrainGaugeKey, boolean>>({
     strainWingRt: true,
     strainWingFold: true,
+    strainFwdFuse: false,
+    strainLHorz: false,
+    strainRHorz: false,
+    strainLVert: false,
+    strainRVert: false,
   })
   const [loading, setLoading] = useState(true)
+
+  const gaugeKeys = Object.keys(STRAIN_GAUGE_NAMES) as StrainGaugeKey[]
+
+  const fetchAircraft = useCallback(async () => {
+    try {
+      const res = await fetch(`${API}/aircraft`)
+      const data: AircraftRecord[] = await res.json()
+      setAircraft(data)
+    } catch (e) {
+      console.error("Failed to fetch aircraft:", e)
+    }
+  }, [])
 
   const fetchFlights = useCallback(async () => {
     setLoading(true)
@@ -77,31 +109,39 @@ export default function StrainMonitoringPage() {
     }
   }, [aircraftFilter])
 
-  useEffect(() => { fetchFlights() }, [fetchFlights])
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void fetchAircraft()
+    }, 0)
 
-  const toggleGauge = (key: string) => {
+    return () => window.clearTimeout(timer)
+  }, [fetchAircraft])
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void fetchFlights()
+    }, 0)
+
+    return () => window.clearTimeout(timer)
+  }, [fetchFlights])
+
+  const toggleGauge = (key: StrainGaugeKey) => {
     setSelectedGauges((prev) => ({ ...prev, [key]: !prev[key] }))
   }
 
   const chartData = flights.map((f) => ({
     label: f.stripNumber?.slice(-8) || String(f.id),
     ...Object.fromEntries(
-      Object.keys(STRAIN_GAUGE_NAMES).map((k) => [k, (f as any)[k] ?? 0])
+      gaugeKeys.map((k) => [k, f[k] ?? 0])
     ),
   }))
 
-  const getAircraftStrainStatus = (acId: string) => {
-    const statuses: Record<string, string> = {
-      "AC-01": "Error — replaced (resolved)",
-      "AC-02": "Normal",
-      "AC-03": "Normal",
-      "AC-04": "Warning — scheduled for replacement",
-      "AC-05": "Normal",
-      "AC-06": "Normal",
-      "AC-07": "Normal",
-      "AC-08": "Normal",
-    }
-    return statuses[acId] || "Unknown"
+  const getStatusBadgeClass = (status: string) => {
+    const normalized = status.toLowerCase()
+    if (normalized.includes("error")) return "bg-red-100 text-red-700 border-red-300"
+    if (normalized.includes("warning")) return "bg-yellow-100 text-yellow-700 border-yellow-300"
+    if (normalized.includes("normal") || normalized.includes("ok")) return "bg-green-100 text-green-700 border-green-300"
+    return "bg-gray-100 text-gray-700 border-gray-300"
   }
 
   return (
@@ -121,14 +161,9 @@ export default function StrainMonitoringPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Aircraft</SelectItem>
-                <SelectItem value="AC-01">AC-01</SelectItem>
-                <SelectItem value="AC-02">AC-02</SelectItem>
-                <SelectItem value="AC-03">AC-03</SelectItem>
-                <SelectItem value="AC-04">AC-04</SelectItem>
-                <SelectItem value="AC-05">AC-05</SelectItem>
-                <SelectItem value="AC-06">AC-06</SelectItem>
-                <SelectItem value="AC-07">AC-07</SelectItem>
-                <SelectItem value="AC-08">AC-08</SelectItem>
+                {aircraft.map((ac) => (
+                  <SelectItem key={ac.tailId} value={ac.tailId}>{ac.tailId}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
             <Button size="sm" variant="outline" onClick={fetchFlights}>Refresh</Button>
@@ -137,23 +172,26 @@ export default function StrainMonitoringPage() {
 
         {/* Gauge Health Status Cards */}
         <div className="grid grid-cols-4 gap-2">
-          {["AC-01", "AC-02", "AC-03", "AC-04", "AC-05", "AC-06", "AC-07", "AC-08"].map((ac) => (
-            <Card key={ac} className="p-2 text-center">
-              <p className="text-xs font-bold">{ac}</p>
-              <Badge className={
-                getAircraftStrainStatus(ac).includes("Error") ? "bg-red-100 text-red-700 border-red-300" :
-                getAircraftStrainStatus(ac).includes("Warning") ? "bg-yellow-100 text-yellow-700 border-yellow-300" :
-                "bg-green-100 text-green-700 border-green-300"
-              }>
-                {getAircraftStrainStatus(ac)}
-              </Badge>
+          {aircraft.length === 0 ? (
+            <Card className="col-span-4 p-4 text-center text-xs text-muted-foreground">
+              {loading ? "Loading aircraft strain gauge status..." : "No aircraft records found. Upload Aircraft Registry data via Document Intelligence."}
             </Card>
-          ))}
+          ) : aircraft.map((ac) => {
+            const status = ac.strainGaugeStatus || "Not recorded"
+            return (
+              <Card key={ac.tailId} className="p-2 text-center">
+                <p className="text-xs font-bold">{ac.tailId}</p>
+                <Badge className={getStatusBadgeClass(status)}>
+                  {status}
+                </Badge>
+              </Card>
+            )
+          })}
         </div>
 
         {/* Gauge Selector */}
         <div className="flex flex-wrap gap-2">
-          {Object.entries(STRAIN_GAUGE_NAMES).map(([key, name]) => (
+          {gaugeKeys.map((key) => (
             <Button
               key={key}
               size="sm"
@@ -161,7 +199,7 @@ export default function StrainMonitoringPage() {
               className="text-xs"
               onClick={() => toggleGauge(key)}
             >
-              {name}
+              {STRAIN_GAUGE_NAMES[key]}
             </Button>
           ))}
         </div>
@@ -180,13 +218,13 @@ export default function StrainMonitoringPage() {
                   <YAxis />
                   <Tooltip />
                   <Legend />
-                  {Object.entries(STRAIN_GAUGE_NAMES).map(([key, name]) =>
+                  {gaugeKeys.map((key) =>
                     selectedGauges[key] ? (
                       <Line
                         key={key}
                         type="monotone"
                         dataKey={key}
-                        name={name}
+                        name={STRAIN_GAUGE_NAMES[key]}
                         stroke={STRAIN_GAUGE_COLORS[key]}
                         strokeWidth={2}
                         dot={false}

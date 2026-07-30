@@ -25,6 +25,13 @@ import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbSeparator } from 
 import { getActiveRoute, SIDEBAR_NAV } from "@/lib/route"
 import { useEffect, useState } from "react"
 
+type AuthUser = {
+  id: number
+  username: string
+  email: string
+  role: string
+}
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   type NavItem = {
     label: string
@@ -42,22 +49,48 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const page = getActiveRoute(pathname);
   const [mounted, setMounted] = useState(false);
   const [open, setOpen] = useState(true);
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [selectedAircraft, setSelectedAircraft] = useState("");
 
   useEffect(() => {
+    const storedUser = localStorage.getItem("aiims-auth-user");
+    if (!storedUser) {
+      router.replace("/login");
+      return;
+    }
+
+    try {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setAuthUser(JSON.parse(storedUser) as AuthUser);
+    } catch {
+      localStorage.removeItem("aiims-auth-user");
+      router.replace("/login");
+      return;
+    }
+
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSelectedAircraft(localStorage.getItem("aiims-selected-aircraft") || "");
+
     const stored = localStorage.getItem("sidebar-open");
     if (stored !== null) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setOpen(stored === "true");
     }
     setMounted(true);
-  }, []);
+  }, [router]);
+
+  const handleSignOut = () => {
+    localStorage.removeItem("aiims-auth-user");
+    localStorage.removeItem("aiims-selected-aircraft");
+    router.push("/login");
+  };
 
   const handleOpenChange = (value: boolean) => {
     setOpen(value);
     localStorage.setItem("sidebar-open", String(value));
   };
 
-  if (!mounted) return null;
+  if (!mounted || !authUser) return null;
 
   return (
     <SidebarProvider open={open} onOpenChange={handleOpenChange}>
@@ -160,15 +193,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <div className="flex justify-center items-center border border bg-gray-100 rounded-lg px-1 py-1 gap-2">
               <Avatar className="text-sm leading-tight" size="sm">
                 <AvatarImage src="" alt="User" />
-                <AvatarFallback className="rounded-lg bg-green-700 text-white">UR</AvatarFallback>
+                <AvatarFallback className="rounded-lg bg-green-700 text-white">
+                  {authUser.username.slice(0, 2).toUpperCase()}
+                </AvatarFallback>
               </Avatar>
-              <p className="text-xs font-medium">User Name</p>
-              <p className="text-xs text-muted-foreground">roles</p>
+              <div className="flex flex-col leading-tight">
+                <p className="text-xs font-medium">{authUser.username}</p>
+                <p className="text-[10px] text-muted-foreground">
+                  {authUser.role}{selectedAircraft ? ` · ${selectedAircraft}` : ""}
+                </p>
+              </div>
             </div>
             <Button 
               size="xs" 
               className="cursor-pointer bg-red-100 text-red-600 border border-red-600 hover:bg-red-300" 
-              onClick={() => router.push("/login")}
+              onClick={handleSignOut}
             >
               Sign Out
             </Button>

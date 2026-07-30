@@ -11,6 +11,9 @@ from decimal import Decimal
 import json
 import os
 import re
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = FastAPI(title="ASI POC1 API", version="1.0.0")
 
@@ -29,9 +32,86 @@ from prisma import Prisma
 
 prisma = Prisma()
 
+ROLE_NAMES = ["ASI Manager", "ASI Engineer", "Analyst", "Auditor"]
+
+ROLE_DEFINITIONS = [
+    {
+        "name": "ASI Manager",
+        "description": "System owner with full administrative and approval authority",
+        "permissions": ["read", "create", "write", "delete", "approve", "export"],
+    },
+    {
+        "name": "ASI Engineer",
+        "description": "Engineering authority for creating, updating, verifying, and exporting ASI records",
+        "permissions": ["read", "create", "write", "approve", "export"],
+    },
+    {
+        "name": "Analyst",
+        "description": "Analysis user for data review, creation, updates, and exports without approval authority",
+        "permissions": ["read", "create", "write", "export"],
+    },
+    {
+        "name": "Auditor",
+        "description": "Read-only compliance user with audit and export access",
+        "permissions": ["read", "export"],
+    },
+]
+
+
+def _normalise_role(role: Optional[str]) -> str:
+    if role in ROLE_NAMES:
+        return role
+    legacy_map = {
+        "admin": "ASI Manager",
+        "engineer": "ASI Engineer",
+        "viewer": "Auditor",
+    }
+    return legacy_map.get((role or "").strip(), "Auditor")
+
+
+def _role_permission_matrix() -> list[dict]:
+    areas = [
+        "Fleet Dashboard",
+        "Fleet Register",
+        "Fleet Utilization",
+        "Condition Data",
+        "Flight Data",
+        "Strain Monitoring",
+        "Fatigue Management",
+        "Defect Analytics",
+        "Damage Mapping",
+        "SLEP",
+        "Document Intelligence",
+        "AI Assistant",
+        "Engineering Reports",
+        "Audit Trail",
+        "Admin & Roles",
+    ]
+
+    role_actions = {
+        "ASI Manager": ["read", "create", "write", "delete", "approve", "export"],
+        "ASI Engineer": ["read", "create", "write", "approve", "export"],
+        "Analyst": ["read", "create", "write", "export"],
+        "Auditor": ["read", "export"],
+    }
+
+    rows = []
+    for area in areas:
+        for role in ROLE_NAMES:
+            actions = role_actions[role].copy()
+            if area == "Admin & Roles" and role != "ASI Manager":
+                actions = ["read"] if role == "Auditor" else ["read", "export"]
+            if area == "Audit Trail" and role in ["Analyst", "Auditor"]:
+                actions = ["read", "export"]
+            if area == "Document Intelligence" and role == "Auditor":
+                actions = ["read", "export"]
+            rows.append({"area": area, "role": role, "actions": actions})
+    return rows
+
 @app.on_event("startup")
 async def startup():
     await prisma.connect()
+    await ensure_admin_user()
     print("✅ Connected to MySQL database")
 
 @app.on_event("shutdown")
@@ -243,13 +323,18 @@ class UserCreate(BaseModel):
     username: str
     email: str
     password: str
-    role: str = "viewer"
+    role: str = "Auditor"
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
 
 class UserResponse(BaseModel):
     id: int
     username: str
     email: str
     role: str
+    createdAt: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -308,6 +393,17 @@ def _build_prisma_data(data: dict) -> dict:
         prisma_data["aircraft"] = {"connect": {"tailId": data["aircraftId"]}}
     return prisma_data
 
+async def ensure_aircraft_exists(aircraft_id: str):
+    """Ensure a referenced aircraft exists before creating relation child records."""
+    if not aircraft_id:
+        return
+
+    existing = await prisma.aircraftregistry.find_unique(where={"tailId": aircraft_id})
+    if existing:
+        return
+
+    await prisma.aircraftregistry.create(data={"tailId": aircraft_id})
+
 async def upsert_flight(data: dict) -> dict:
     """Upsert flight by stripNumber (unique) + aircraftId."""
     # Ensure required flightDate field is present (datetime object, not string)
@@ -315,6 +411,8 @@ async def upsert_flight(data: dict) -> dict:
         data["flightDate"] = datetime.now()
     elif isinstance(data["flightDate"], str):
         data["flightDate"] = datetime.now()
+    
+    await ensure_aircraft_exists(data.get("aircraftId"))
     
     # Build Prisma data with relation connect syntax
     prisma_data = _build_prisma_data(data)
@@ -347,6 +445,8 @@ async def upsert_fatigue(data: dict) -> dict:
         except (ValueError, TypeError):
             data["periodEnd"] = None
     
+    await ensure_aircraft_exists(data.get("aircraftId"))
+    
     # Build Prisma data with relation connect syntax
     prisma_data = _build_prisma_data(data)
     
@@ -365,6 +465,8 @@ async def upsert_fatigue(data: dict) -> dict:
 
 async def upsert_mission_severity(data: dict) -> dict:
     """Upsert mission severity by aircraftId + opcCode (composite unique)."""
+    await ensure_aircraft_exists(data.get("aircraftId"))
+    
     # Build Prisma data with relation connect syntax
     prisma_data = _build_prisma_data(data)
     
@@ -383,6 +485,8 @@ async def upsert_mission_severity(data: dict) -> dict:
 
 async def upsert_defect(data: dict) -> dict:
     """Upsert defect by ncrdRef (unique)."""
+    await ensure_aircraft_exists(data.get("aircraftId"))
+    
     # Build Prisma data with relation connect syntax
     prisma_data = _build_prisma_data(data)
     
@@ -401,6 +505,8 @@ async def upsert_defect(data: dict) -> dict:
 
 async def upsert_corrosion(data: dict) -> dict:
     """Upsert corrosion by corrosionId (unique)."""
+    await ensure_aircraft_exists(data.get("aircraftId"))
+    
     # Build Prisma data with relation connect syntax
     prisma_data = _build_prisma_data(data)
     
@@ -437,6 +543,41 @@ async def _ensure_connected():
         await prisma.connect()
     except Exception:
         pass
+
+async def ensure_admin_user():
+    """Ensure the administrator from backend/.env exists in persistent database storage."""
+    admin_username = os.getenv("ADMIN_USERNAME", "admin")
+    admin_password = os.getenv("ADMIN_PASSWORD", "admin123")
+    admin_email = os.getenv("ADMIN_EMAIL", "admin@asi.local")
+    admin_role = _normalise_role(os.getenv("ADMIN_ROLE", "ASI Manager"))
+
+    existing = await prisma.user.find_unique(where={"username": admin_username})
+    if existing:
+        update_data = {}
+        if existing.password != admin_password:
+            update_data["password"] = admin_password
+        if existing.role != admin_role:
+            update_data["role"] = admin_role
+        if existing.email != admin_email:
+            update_data["email"] = admin_email
+        if update_data:
+            await prisma.user.update(where={"id": existing.id}, data=update_data)
+        return
+
+    await prisma.user.create(data={
+        "username": admin_username,
+        "email": admin_email,
+        "password": admin_password,
+        "role": admin_role,
+    })
+
+def _serialize_user(record) -> dict:
+    user = _serialize_record(record)
+    if not user:
+        return user
+    user.pop("password", None)
+    user["role"] = _normalise_role(user.get("role"))
+    return user
 
 # ---- HEALTH CHECK ----
 @app.get("/api/health")
@@ -729,19 +870,65 @@ def create_ingested_doc(data: IngestDocCreate):
 
 # ========== 12. USERS ==========
 @app.post("/api/users", response_model=UserResponse)
-def create_user(data: UserCreate):
-    global user_id_seq
-    if data.username in user_db:
-        raise HTTPException(400, "User already exists")
-    record = data.model_dump()
-    record["id"] = user_id_seq
-    user_id_seq += 1
-    user_db[data.username] = record
-    return record
+async def create_user(data: UserCreate):
+    await _ensure_connected()
+    role = _normalise_role(data.role)
+
+    existing_username = await prisma.user.find_unique(where={"username": data.username})
+    if existing_username:
+        raise HTTPException(400, "Username already exists")
+
+    existing_email = await prisma.user.find_unique(where={"email": data.email})
+    if existing_email:
+        raise HTTPException(400, "Email already exists")
+
+    created = await prisma.user.create(data={
+        "username": data.username,
+        "email": data.email,
+        "password": data.password,
+        "role": role,
+    })
+    return _serialize_user(created)
 
 @app.get("/api/users", response_model=List[UserResponse])
-def list_users():
-    return list(user_db.values())
+async def list_users():
+    await _ensure_connected()
+    await ensure_admin_user()
+    records = await prisma.user.find_many(order={"createdAt": "desc"})
+    return [_serialize_user(r) for r in records]
+
+@app.post("/api/auth/login")
+async def login(data: LoginRequest):
+    await _ensure_connected()
+    await ensure_admin_user()
+    user = await prisma.user.find_unique(where={"username": data.username})
+    if not user or user.password != data.password:
+        raise HTTPException(401, "Invalid username or password")
+
+    return {
+        "ok": True,
+        "user": _serialize_user(user),
+    }
+
+@app.get("/api/roles")
+def list_roles():
+    """Return application role definitions.
+
+    Roles are application metadata. The database stores each user's role string,
+    while this endpoint provides the permissions and matrix used by the UI.
+    """
+    return [
+        {
+            "name": role["name"],
+            "description": role["description"],
+            "permissions": json.dumps(role["permissions"]),
+        }
+        for role in ROLE_DEFINITIONS
+    ]
+
+@app.get("/api/roles/matrix")
+def list_role_matrix():
+    return _role_permission_matrix()
 
 # ========== 13. DASHBOARD STATS ==========
 @app.get("/api/dashboard/stats")
@@ -776,7 +963,7 @@ async def dashboard_stats():
 
 # ========== 14. SEED ENDPOINT ==========
 @app.post("/api/seed")
-def seed_database():
+async def seed_database():
     """Populate database with initial reference data from FA-18D report."""
     
     # --- AIRCRAFT ---
@@ -890,12 +1077,16 @@ def seed_database():
     
     # --- USERS ---
     users = [
-        {"username": "admin", "email": "admin@asi.com", "password": "admin123", "role": "admin"},
-        {"username": "engineer", "email": "engineer@asi.com", "password": "eng123", "role": "engineer"},
-        {"username": "viewer", "email": "viewer@asi.com", "password": "view123", "role": "viewer"},
+        {"username": "admin", "email": "admin@asi.com", "password": "admin123", "role": "ASI Manager"},
+        {"username": "engineer", "email": "engineer@asi.com", "password": "eng123", "role": "ASI Engineer"},
+        {"username": "analyst", "email": "analyst@asi.com", "password": "analyst123", "role": "Analyst"},
+        {"username": "auditor", "email": "auditor@asi.com", "password": "audit123", "role": "Auditor"},
     ]
     for u in users:
-        create_user(UserCreate(**u))
+        try:
+            await create_user(UserCreate(**u))
+        except HTTPException:
+            pass
     
     return {"ok": True, "message": "Database seeded with FA-18D report data"}
 

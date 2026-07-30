@@ -321,7 +321,7 @@ for cell in ws6[1]:
 
 # Sample data - 3 corrosion records
 corrosion_data = [
-    ["C001", "AC-07", "Horizontal Stabiliser", "Sign of corrosion at tip",
+    ["C001", "AC-02", "Horizontal Stabiliser", "Sign of corrosion at tip",
      "ASDR-31052023-0001", "31/5/2023", "Grade 2"],
     
     ["C002", "AC-03", "Fin Cap", "Grade 3 corrosion found",

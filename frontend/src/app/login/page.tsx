@@ -26,11 +26,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 
+const API = "http://localhost:8000/api"
+
 export default function Login() {
   const router = useRouter();
   const [loading, setLoading] = useState(false)
   const [openDialog, setOpenDialog] = useState(false)
   const [selectedAircraft, setSelectedAircraft] = useState("")
+  const [username, setUsername] = useState("")
+  const [password, setPassword] = useState("")
+  const [error, setError] = useState("")
 
   const AIRCRAFT_MODELS = [
     "HERCULES",
@@ -48,10 +53,31 @@ export default function Login() {
   ] as const
 
   async function handleSignIn() {
+    setError("")
     setLoading(true);
-    await new Promise((resolve) => setTimeout(resolve, 2000)); // Simulate async operation
-    setLoading(false);
-    router.push("/");
+    try {
+      const res = await fetch(`${API}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      })
+
+      if (!res.ok) {
+        const message = await res.text()
+        throw new Error(message || "Invalid username or password")
+      }
+
+      const data = await res.json()
+      localStorage.setItem("aiims-auth-user", JSON.stringify(data.user))
+      localStorage.setItem("aiims-selected-aircraft", selectedAircraft)
+      setOpenDialog(false)
+      router.push("/");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to sign in")
+      setOpenDialog(false)
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -83,6 +109,7 @@ export default function Login() {
               <form
                 onSubmit={(e) => {
                   e.preventDefault()
+                  setError("")
                   setOpenDialog(true)
                 }}
               >
@@ -108,6 +135,8 @@ export default function Login() {
                       type="text"
                       className="text-xs"
                       placeholder="e.g. SVC-20440123"
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
                       required
                     />
                   </Field>
@@ -123,9 +152,17 @@ export default function Login() {
                       id="password"
                       type="password"
                       placeholder="••••••••"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
                       required
                     />
                   </Field>
+
+                  {error && (
+                    <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                      {error}
+                    </div>
+                  )}
 
                   <Field>
                     <Button

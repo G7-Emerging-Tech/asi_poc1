@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect } from "react"
 import { AppShell } from "@/components/app-shell"
 import {
   Table,
@@ -10,7 +10,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend } from "recharts"
@@ -22,8 +21,12 @@ interface AircraftRecord {
   afhPrevPeriod?: number
   status: string
   lifePercentConsumed?: number
-  estYearFlei1?: number
   notes?: string
+}
+
+interface FatigueRecord {
+  aircraftId: string
+  estYearFlei1?: number
 }
 
 interface MissionSevRecord {
@@ -42,25 +45,34 @@ const COLORS = ["#3b82f6", "#22c55e", "#f97316", "#ef4444", "#8b5cf6", "#eab308"
 export default function FleetUtilizationPage() {
   const [aircraft, setAircraft] = useState<AircraftRecord[]>([])
   const [missions, setMissions] = useState<MissionSevRecord[]>([])
+  const [fatigue, setFatigue] = useState<FatigueRecord[]>([])
   const [loading, setLoading] = useState(true)
 
-  const fetchData = useCallback(async () => {
-    setLoading(true)
-    try {
-      const [acRes, misRes] = await Promise.all([
-        fetch(`${API}/aircraft`),
-        fetch(`${API}/mission-severity`),
-      ])
-      setAircraft(await acRes.json())
-      setMissions(await misRes.json())
-    } catch (e) {
-      console.error("Failed to fetch:", e)
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const fetchData = async () => {
+        setLoading(true)
+        try {
+          const [acRes, misRes, fatigueRes] = await Promise.all([
+            fetch(`${API}/aircraft`),
+            fetch(`${API}/mission-severity`),
+            fetch(`${API}/fatigue`),
+          ])
+          setAircraft(await acRes.json())
+          setMissions(await misRes.json())
+          setFatigue(await fatigueRes.json())
+        } catch (e) {
+          console.error("Failed to fetch:", e)
+        } finally {
+          setLoading(false)
+        }
+      }
 
-  useEffect(() => { fetchData() }, [fetchData])
+      void fetchData()
+    }, 0)
+
+    return () => window.clearTimeout(timer)
+  }, [])
 
   // AFH bar chart
   const afhChartData = aircraft.map((a) => ({
@@ -77,7 +89,62 @@ export default function FleetUtilizationPage() {
 
   const totalAnnualHours = aircraft.reduce((s, a) => s + (a.afhAnnualIncrement || 0), 0)
   const activeAircraft = aircraft.filter((a) => a.status === "operational").length
-  const targetUE = 360 // hr/year per aircraft
+  const utilizationReference = Math.max(...aircraft.map((a) => a.afhAnnualIncrement || 0), 0)
+  const highestUtilized = aircraft.reduce<AircraftRecord | null>((max, a) => {
+    if (!max) return a
+    return (a.afhAnnualIncrement || 0) > (max.afhAnnualIncrement || 0) ? a : max
+  }, null)
+  const lowestUtilized = aircraft
+    .filter((a) => (a.afhAnnualIncrement || 0) > 0)
+    .reduce<AircraftRecord | null>((min, a) => {
+      if (!min) return a
+      return (a.afhAnnualIncrement || 0) < (min.afhAnnualIncrement || 0) ? a : min
+    }, null)
+  const groundedAircraft = aircraft.filter((a) => (a.afhAnnualIncrement || 0) === 0)
+  const highestMissionByFlei = missions.reduce<MissionSevRecord | null>((max, mission) => {
+    if (!max) return mission
+    return (mission.wrFleiSum || 0) > (max.wrFleiSum || 0) ? mission : max
+  }, null)
+  const highLifeAircraft = aircraft.filter((a) => (a.lifePercentConsumed || 0) >= 85)
+  const fatigueByAircraft = new Map(fatigue.map((f) => [f.aircraftId, f]))
+
+  const insightCards = [
+    highestUtilized
+      ? {
+          title: "Highest Annual Utilization",
+          body: `${highestUtilized.tailId} has the highest uploaded annual increment at ${(highestUtilized.afhAnnualIncrement || 0).toFixed(1)} FH.`,
+          color: "border-l-blue-500 bg-blue-50",
+        }
+      : null,
+    lowestUtilized && highestUtilized && lowestUtilized.tailId !== highestUtilized.tailId
+      ? {
+          title: "Lowest Active Annual Utilization",
+          body: `${lowestUtilized.tailId} has the lowest non-zero uploaded annual increment at ${(lowestUtilized.afhAnnualIncrement || 0).toFixed(1)} FH.`,
+          color: "border-l-yellow-500 bg-yellow-50",
+        }
+      : null,
+    groundedAircraft.length > 0
+      ? {
+          title: "Zero Annual FH Records",
+          body: `${groundedAircraft.length} aircraft have zero or missing annual flying hours: ${groundedAircraft.map((a) => a.tailId).join(", ")}.`,
+          color: "border-l-orange-500 bg-orange-50",
+        }
+      : null,
+    highestMissionByFlei
+      ? {
+          title: "Highest Uploaded Mission FLEI Contribution",
+          body: `${highestMissionByFlei.opcCode}${highestMissionByFlei.missionTypeName ? ` — ${highestMissionByFlei.missionTypeName}` : ""} has the highest WR FLEI sum (${highestMissionByFlei.wrFleiSum ?? 0}).`,
+          color: "border-l-green-500 bg-green-50",
+        }
+      : null,
+    highLifeAircraft.length > 0
+      ? {
+          title: "High Life Consumption",
+          body: `${highLifeAircraft.map((a) => `${a.tailId} (${a.lifePercentConsumed}%)`).join(", ")} are at or above 85% life consumed based on uploaded registry data.`,
+          color: "border-l-red-500 bg-red-50",
+        }
+      : null,
+  ].filter(Boolean) as { title: string; body: string; color: string }[]
 
   return (
     <AppShell>
@@ -104,8 +171,8 @@ export default function FleetUtilizationPage() {
             <p className="text-[10px] text-muted-foreground">Total Annual FH</p>
           </Card>
           <Card className="p-3 text-center border-t-4 border-t-red-500">
-            <p className="text-2xl font-bold text-red-600">{targetUE} hr</p>
-            <p className="text-[10px] text-muted-foreground">UE Target / AC / Yr</p>
+            <p className="text-2xl font-bold text-red-600">{utilizationReference.toFixed(0)} hr</p>
+            <p className="text-[10px] text-muted-foreground">Highest Annual FH Uploaded</p>
           </Card>
         </div>
 
@@ -162,16 +229,23 @@ export default function FleetUtilizationPage() {
                   <TableHead className="font-bold text-[10px]">Current AFH</TableHead>
                   <TableHead className="font-bold text-[10px]">Prev AFH</TableHead>
                   <TableHead className="font-bold text-[10px]">Annual Δ</TableHead>
-                  <TableHead className="font-bold text-[10px]">% UE Achieved</TableHead>
+                  <TableHead className="font-bold text-[10px]">% Fleet Ref</TableHead>
                   <TableHead className="font-bold text-[10px]">Life %</TableHead>
                   <TableHead className="font-bold text-[10px]">FLEI=1.0 Year</TableHead>
                   <TableHead className="font-bold text-[10px]">Notes</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {aircraft.map((a) => {
+                {aircraft.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={9} className="py-6 text-center text-muted-foreground">
+                      {loading ? "Loading aircraft utilization data..." : "No aircraft utilization data found. Upload Aircraft Registry data via Document Intelligence."}
+                    </TableCell>
+                  </TableRow>
+                ) : aircraft.map((a) => {
                   const annual = a.afhAnnualIncrement || 0
-                  const uePercent = ((annual / targetUE) * 100).toFixed(0)
+                  const uePercent = utilizationReference > 0 ? ((annual / utilizationReference) * 100).toFixed(0) : "0"
+                  const fatigueRecord = fatigueByAircraft.get(a.tailId)
                   return (
                     <TableRow key={a.tailId}>
                       <TableCell className="font-semibold">{a.tailId}</TableCell>
@@ -192,7 +266,7 @@ export default function FleetUtilizationPage() {
                         </span>
                       </TableCell>
                       <TableCell>{a.lifePercentConsumed ? `${a.lifePercentConsumed}%` : "-"}</TableCell>
-                      <TableCell>{a.estYearFlei1 || "-"}</TableCell>
+                      <TableCell>{fatigueRecord?.estYearFlei1 || "-"}</TableCell>
                       <TableCell className="text-muted-foreground max-w-[200px] truncate">
                         {a.notes || "-"}
                       </TableCell>
@@ -207,38 +281,22 @@ export default function FleetUtilizationPage() {
         {/* Insights Card */}
         <Card className="border-t-4 border-t-orange-500 p-4">
           <p className="text-xs font-semibold text-muted-foreground uppercase mb-2">
-            Utilization Insights (from FA-18D Annual Report)
+            Utilization Insights (from Uploaded Database Records)
           </p>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-lg border p-3 border-l-4 border-l-blue-500 bg-blue-50">
-              <p className="text-xs font-bold">Uneven Fleet Distribution</p>
-              <p className="text-[10px] mt-1">
-                2,726.34 hr difference between AC-01 (highest) and AC-05 (lowest among operational).
-                AC-01: 5,448.82 hr vs AC-05: 3,960.20 hr.
-              </p>
+          {insightCards.length === 0 ? (
+            <p className="py-4 text-center text-xs text-muted-foreground">
+              No utilization insights available because the database does not contain aircraft or mission severity records.
+            </p>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              {insightCards.map((insight) => (
+                <div key={insight.title} className={`rounded-lg border p-3 border-l-4 ${insight.color}`}>
+                  <p className="text-xs font-bold">{insight.title}</p>
+                  <p className="text-[10px] mt-1">{insight.body}</p>
+                </div>
+              ))}
             </div>
-            <div className="rounded-lg border p-3 border-l-4 border-l-yellow-500 bg-yellow-50">
-              <p className="text-xs font-bold">UE Achievement Gap</p>
-              <p className="text-[10px] mt-1">
-                Only AC-05 achieved Utilisation Effort (360 hr/yr) in 2023. 
-                AC-02/04/07/08 logged zero flying hours. Uneven distribution increases per-aircraft fatigue rate.
-              </p>
-            </div>
-            <div className="rounded-lg border p-3 border-l-4 border-l-green-500 bg-green-50">
-              <p className="text-xs font-bold">Mission Severity - OPC 03 Dominance</p>
-              <p className="text-[10px] mt-1">
-                Air-to-Ground Training (OPC 03) contributes 68% of total fleet WR FLEI sum despite moderate 
-                per-mission severity. Distribute across aircraft to equalise fatigue.
-              </p>
-            </div>
-            <div className="rounded-lg border p-3 border-l-4 border-l-purple-500 bg-purple-50">
-              <p className="text-xs font-bold">Target: Equalise Fleet Usage</p>
-              <p className="text-[10px] mt-1">
-                Recommendation: Reduce AC-01 annual AFH; increase AC-05 and grounded aircraft 
-                to distribute fatigue more evenly across the fleet.
-              </p>
-            </div>
-          </div>
+          )}
         </Card>
       </div>
     </AppShell>

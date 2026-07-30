@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useState, useCallback, useMemo } from "react"
 import { AppShell } from "@/components/app-shell"
 import {
   Table,
@@ -9,7 +10,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { Card } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
+const API = "http://localhost:8000/api"
 
 type WrFleiRow = {
   aircraft: string
@@ -37,95 +43,139 @@ type LifeProjectionRow = {
   afhFlei: number
 }
 
-const wrFleiData: WrFleiRow[] = [
-  {
-    aircraft: "AC-01",
-    current: 0.4387,
-    delta: 1.882e-2,
-    pwd: 2025,
-    risk: "High",
-  },
-  {
-    aircraft: "AC-02",
-    current: 0.3418,
-    delta: 0.0,
-    pwd: 2030,
-    risk: "Monitor",
-  },
-  {
-    aircraft: "AC-03",
-    current: 0.2867,
-    delta: 1.315e-2,
-    pwd: 2029,
-    risk: "Low",
-  },
-]
+interface FatigueRecord {
+  id: number
+  aircraftId: string
+  wrFleiCurrent?: number
+  wfFleiCurrent?: number
+  wrFleiAnnualDelta?: number
+  usageGradient?: number
+  estFleiAt6000Afh?: number
+  estYearFlei1?: number
+  estAfhAtFlei1?: number
+}
 
-const missionSeverityData: MissionSeverityRow[] = [
-  {
-    opc: "04",
-    type: "Aerobatics (LLA/LAT)",
-    missions: 12,
-    avgFlei: 6.732e-5,
-    wrFleiSum: 8.079e-4,
-    total: "2%",
-  },
-  {
-    opc: "03",
-    type: "Air-to-Ground Training",
-    missions: 420,
-    avgFlei: 6.3e-5,
-    wrFleiSum: 2.645e-2,
-    total: "68%",
-  },
-  {
-    opc: "01",
-    type: "FAM/Ferry/Navigation",
-    missions: 198,
-    avgFlei: 2.307e-5,
-    wrFleiSum: 4.726e-3,
-    total: "12%",
-  },
-  {
-    opc: "02",
-    type: "Air-to-Air Engagement",
-    missions: 312,
-    avgFlei: 2.387e-5,
-    wrFleiSum: 7.199e-3,
-    total: "18%",
-  },
-]
+interface MissionContribution {
+  id: number
+  aircraftId: string
+  opcCode: string
+  missionTypeName?: string
+  missionsCount?: number
+  avgFleiPerMission?: number
+  wrFleiSum?: number
+  percentOfTotal?: string
+}
 
-const lifeProjectionData: LifeProjectionRow[] = [
-  {
-    aircraft: "AC-01",
-    usageGradient: "8.249e-5",
-    currentAfh: 5448.82,
-    flei6000: 0.495,
-    yearFlei: 2043,
-    afhFlei: 12122.42,
-  },
-  {
-    aircraft: "AC-02",
-    usageGradient: "8.469e-5",
-    currentAfh: 3985.01,
-    flei6000: 0.508,
-    yearFlei: 2046,
-    afhFlei: 11808.38,
-  },
-  {
-    aircraft: "AC-03",
-    usageGradient: "7.431e-5",
-    currentAfh: 4116.79,
-    flei6000: 0.446,
-    yearFlei: 2050,
-    afhFlei: 13455.55,
-  },
-]
-
-
+interface AircraftRecord {
+  id: number
+  tailId: string
+  totalAfh: number
+  afhAnnualIncrement?: number
+  designLifeLimitAfh?: number
+  pwdYear?: number
+}
 
 export default function FatigueManagement() {
+  const [fatigue, setFatigue] = useState<FatigueRecord[]>([])
+  const [missions, setMissions] = useState<MissionContribution[]>([])
+  const [aircraft, setAircraft] = useState<AircraftRecord[]>([])
+  const [loading, setLoading] = useState(true)
+  const [selectedAircraft, setSelectedAircraft] = useState<string>("all")
+
+  const fetchData = useCallback(async () => {
+    setLoading(true)
+    try {
+      const [fatRes, missRes, acRes] = await Promise.all([
+        fetch(`${API}/fatigue`),
+        fetch(`${API}/mission-severity`),
+        fetch(`${API}/aircraft`),
+      ])
+      const fatData: FatigueRecord[] = await fatRes.json()
+      const missData: MissionContribution[] = await missRes.json()
+      const acData: AircraftRecord[] = await acRes.json()
+      
+      setFatigue(fatData)
+      setMissions(Array.isArray(missData) ? missData : [])
+      setAircraft(acData)
+    } catch (e) {
+      console.error("Failed to fetch fatigue data:", e)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { void fetchData() }, [fetchData])
+
+  // Transform fatigue data to WrFleiRow format
+  const wrFleiData: WrFleiRow[] = useMemo(() => {
+    return fatigue.map(f => {
+      const ac = aircraft.find(a => a.tailId === f.aircraftId)
+      const pwdYear = ac?.pwdYear || new Date().getFullYear() + 10
+      const current = f.wrFleiCurrent || 0
+      const delta = f.wrFleiAnnualDelta || 0
+      
+      let risk: "High" | "Monitor" | "Low" = "Low"
+      if (current >= 0.4 || pwdYear <= new Date().getFullYear()) {
+        risk = "High"
+      } else if (current >= 0.3 || delta > 0.015) {
+        risk = "Monitor"
+      }
+      
+      return {
+        aircraft: f.aircraftId,
+        current,
+        delta,
+        pwd: pwdYear,
+        risk,
+      }
+    })
+  }, [fatigue, aircraft])
+
+  // Transform mission data
+  const missionSeverityData: MissionSeverityRow[] = useMemo(() => {
+    if (!Array.isArray(missions) || missions.length === 0) return []
+    
+    const opcMap = new Map<string, MissionContribution>()
+    
+    missions.forEach(m => {
+      const existing = opcMap.get(m.opcCode)
+      if (existing) {
+        existing.missionsCount = (existing.missionsCount || 0) + (m.missionsCount || 0)
+        existing.wrFleiSum = (existing.wrFleiSum || 0) + (m.wrFleiSum || 0)
+      } else {
+        opcMap.set(m.opcCode, { ...m })
+      }
+    })
+
+    const totalMissions = Array.from(opcMap.values()).reduce((sum, m) => sum + (m.missionsCount || 0), 0)
+    
+    return Array.from(opcMap.values()).map(m => ({
+      opc: m.opcCode,
+      type: m.missionTypeName || m.opcCode,
+      missions: m.missionsCount || 0,
+      avgFlei: m.avgFleiPerMission || 0,
+      wrFleiSum: m.wrFleiSum || 0,
+      total: totalMissions > 0 ? `${((m.missionsCount || 0) / totalMissions * 100).toFixed(0)}%` : "0%",
+    }))
+  }, [missions])
+
+  // Transform to life projection format
+  const lifeProjectionData: LifeProjectionRow[] = useMemo(() => {
+    return fatigue
+      .filter(f => f.estYearFlei1 && f.estAfhAtFlei1)
+      .map(f => {
+        const ac = aircraft.find(a => a.tailId === f.aircraftId)
+        return {
+          aircraft: f.aircraftId,
+          usageGradient: f.usageGradient?.toExponential(3) || "0",
+          currentAfh: ac?.totalAfh || 0,
+          flei6000: f.estFleiAt6000Afh || 0,
+          yearFlei: f.estYearFlei1 || 0,
+          afhFlei: f.estAfhAtFlei1 || 0,
+        }
+      })
+  }, [fatigue, aircraft])
+
   function getRiskClass(risk: string) {
     switch (risk) {
       case "High":
@@ -138,6 +188,17 @@ export default function FatigueManagement() {
         return "bg-gray-100 text-gray-700 border-gray-400"
     }
   }
+
+  if (loading) {
+    return (
+      <AppShell>
+        <div className="flex items-center justify-center h-[70vh]">
+          <div className="h-12 w-12 rounded-full border-4 border-blue-500 border-t-transparent animate-spin" />
+        </div>
+      </AppShell>
+    )
+  }
+
   return (
     <AppShell>
       <div className="p-4 space-y-6">
@@ -258,10 +319,11 @@ export default function FatigueManagement() {
                 ))}
               </TableBody>
             </Table>
-            <span className="mt-2 inline-block border bg-purple-100 px-3 py-2 rounded-md text-xs text-purple-800">
-              OPC 03 (Air-to-Ground Training) = 68% of total WR FLEI sum due to high
-              volume (420 missions). Distribute across aircraft to equalise fatigue.
-            </span>
+            {missionSeverityData.length > 0 && (
+              <span className="mt-2 inline-block border bg-purple-100 px-3 py-2 rounded-md text-xs text-purple-800">
+                OPC {missionSeverityData.sort((a, b) => b.wrFleiSum - a.wrFleiSum)[0]?.opc} ({missionSeverityData.sort((a, b) => b.wrFleiSum - a.wrFleiSum)[0]?.type}) = highest WR FLEI contribution · Distribute across aircraft to equalise fatigue.
+              </span>
+            )}
           </div>
 
         </div>
@@ -320,9 +382,11 @@ export default function FatigueManagement() {
               ))}
             </TableBody>
           </Table>
-          <span className="mt-2 inline-block border bg-green-100 px-3 py-2 rounded-md text-xs text-green-800">
-            All aircraft well below OEM design usage curve. Maximum FLEI at 6,000 AFH ≈ 0.42–0.51 — aircraft have significant reserve fatigue life. Estimated service to 2043–2053 if maintained.
-          </span>
+          {lifeProjectionData.length > 0 && (
+            <span className="mt-2 inline-block border bg-green-100 px-3 py-2 rounded-md text-xs text-green-800">
+              All aircraft below OEM design usage curve. Estimated service life extends beyond 6,000 AFH design limit.
+            </span>
+          )}
         </div>
 
       </div>
@@ -339,7 +403,8 @@ function getCurrentClass(value: number) {
 }
 
 function getPwdClass(year: number) {
-  if (year <= 2025) {
+  const currentYear = new Date().getFullYear()
+  if (year <= currentYear) {
     return "text-red-700"
   }
 

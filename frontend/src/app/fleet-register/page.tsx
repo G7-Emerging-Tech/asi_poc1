@@ -1,186 +1,183 @@
 "use client"
 
+import { useEffect, useState, useCallback } from "react"
 import { AppShell } from "@/components/app-shell"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Field, FieldLabel } from "@/components/ui/field";
-import { Progress } from "@/components/ui/progress";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { cn } from "@/lib/utils";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Field, FieldLabel } from "@/components/ui/field"
+import { Progress } from "@/components/ui/progress"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { cn } from "@/lib/utils"
 import { AlertTriangle, Check, Plus } from "lucide-react"
-import { useState } from "react";
-import { formatDateDDMMYY } from "@/utils/dateFormat";
+import { formatDateDDMMYY } from "@/utils/dateFormat"
+
+const API = "http://localhost:8000/api"
 
 type FleetRow = {
-  tail: string;
-  afh: number;
-  deltaAnnual: number;
-  wrFlei: number;
-  wfFlei: number;
-  lifePercent: number;
-  defectsTotal: number;
-  deltaLatest: number;
-  corrosions: number;
-  lpm12y: boolean;
-  status: "operational" | "maintenance";
+  tail: string
+  afh: number
+  deltaAnnual: number
+  wrFlei: number
+  wfFlei: number
+  lifePercent: number
+  defectsTotal: number
+  deltaLatest: number
+  corrosions: number
+  lpm12y: boolean
+  status: "operational" | "maintenance"
 
-  //Details fields can be added here as needed
-  afhPrev?: number;
-  designLifeLimit?: number;
-  pwdYear?: number;
-  lpm12yInductionAFH?: number;
-  lpm12yDateIn?: string;
-  lpm12yDateOut?: string;
-  nextServicing?: string;
-  engineLH?: string;
-  engineRH?: string;
-  estFleiAt6000?: number;
-  estYearFlei?: number;
-  estAfhFlei?: number;
-  strainGaugeStatus?: string;
-  ncrdTotal?: number;
-  ncrdIncorporated?: number;
-  ncrdOnHold?: number;
-  ncrdSurfaceDefects?: number;
-  notes?: string;
-  activeEntry?: string;
-};
+  afhPrev?: number
+  designLifeLimit?: number
+  pwdYear?: number
+  lpm12yInductionAFH?: number
+  lpm12yDateIn?: string
+  lpm12yDateOut?: string
+  nextServicing?: string
+  engineLH?: string
+  engineRH?: string
+  estFleiAt6000?: number
+  estYearFlei?: number
+  estAfhFlei?: number
+  strainGaugeStatus?: string
+  ncrdTotal?: number
+  ncrdIncorporated?: number
+  ncrdOnHold?: number
+  ncrdSurfaceDefects?: number
+  notes?: string
+  activeEntry?: string
+}
 
-{/* Dummy data for demonstration purposes, replace with actual data api*/}
-const dummyData: FleetRow[] = [
-  {
-    tail: "AC-01",
-    afh: 5448.82,
-    deltaAnnual: 228.1982,
-    wrFlei: 0.4387,
-    wfFlei: 0.0968,
-    lifePercent: 91,
-    defectsTotal: 108,
-    deltaLatest: 3,
-    corrosions: 0,
-    lpm12y: true,
-    status: "operational",
-    afhPrev: 5210.63,
-    designLifeLimit: 6000,
-    pwdYear: 2025,
-    lpm12yInductionAFH: 5943.8,
-    lpm12yDateIn: "2023-01-15",
-    lpm12yDateOut: "2024-01-10",
-    nextServicing: "2024-06-01",
-    engineLH: "E946016 · 3585.7 FH",
-    engineRH: "E946011 · 4025.2 FH",
-    estFleiAt6000: 0.495,
-    estYearFlei: 2043,
-    estAfhFlei: 12122.42,
-    strainGaugeStatus: "Error — replaced (resolved)",
-    ncrdTotal: 39,
-    ncrdIncorporated: 30,
-    ncrdOnHold: 9,
-    ncrdSurfaceDefects: 163,
-    notes: "Requires close monitoring due to high AFH and FLEI values.",
-    activeEntry: "Black Line Entry: NCRD M4501/0001/2022 ACTIVE"
-  },
-  {
-    tail: "AC-02",
-    afh: 3985.01,
-    deltaAnnual: 0,
-    wrFlei: 0.3418,
-    wfFlei: 0.0926,
-    lifePercent: 66,
-    defectsTotal: 44,
-    deltaLatest: 0,
-    corrosions: 0,
-    lpm12y: true,
-    status: "operational",
-    afhPrev: 3985.01,
-    designLifeLimit: 6000,
-    pwdYear: 2024,
-    lpm12yInductionAFH: 3985.01,
-    lpm12yDateIn: "2024-02-20",
-    lpm12yDateOut: "",
-    nextServicing: "2024-08-15",
-    engineLH: "E946017 · 1985.4 FH",
-    engineRH: "E946012 · 1985.4 FH",
-    estFleiAt6000: 0.45,
-    estYearFlei: 2028,
-    estAfhFlei: 12000,
-    strainGaugeStatus: "Normal",
-    ncrdTotal: 12,
-    ncrdIncorporated: 10,
-    ncrdOnHold: 2,
-    ncrdSurfaceDefects: 45,
-    notes: "Newly inducted with LPM12Y data, showing good initial condition.",
-    activeEntry: "Black Line Entry: NCRD M4501/0002/2024 ACTIVE"
-  },
-  {
-    tail: "AC-03",
-    afh: 4116.79,
-    deltaAnnual: 176.90,
-    wrFlei: 0.2867,
-    wfFlei: 0.0724,
-    lifePercent: 80,
-    defectsTotal: 29,
-    deltaLatest: 3,
-    corrosions: 0,
-    lpm12y: false,
-    status: "operational",
-    afhPrev: 3939.89,
-    designLifeLimit: 6000,
-    pwdYear: 2023,
-    lpm12yInductionAFH: 0,
-    lpm12yDateIn: "",
-    lpm12yDateOut: "",
-    nextServicing: "2024-07-10",
-    engineLH: "E946018 · 2116.8 FH",
-    engineRH: "E946013 · 2000.0 FH",
-    estFleiAt6000: 0.4,
-    estYearFlei: 2030,
-    estAfhFlei: 11800,
-    strainGaugeStatus: "Normal",
-    ncrdTotal: 20,
-    ncrdIncorporated: 15,
-    ncrdOnHold: 5,
-    ncrdSurfaceDefects: 30,
-    notes: "AFH increased by 176.90 since last year, needs monitoring.",
-    activeEntry: "Black Line Entry: NCRD M4501/0003/2023 ACTIVE"
-  },
-  {
-    tail: "AC-04",
-    afh: 4029.42,
-    deltaAnnual: 0,
-    wrFlei: 0.3085,
-    wfFlei: 0.1120,
-    lifePercent: 73,
-    defectsTotal: 48,
-    deltaLatest: 0,
-    corrosions: 0,
-    lpm12y: false,
-    status: "maintenance",
-    afhPrev: 4029.42,
-    designLifeLimit: 6000,
-    pwdYear: 2024,
-    lpm12yInductionAFH: 0,
-    lpm12yDateIn: "",
-    lpm12yDateOut: "",
-    nextServicing: "2024-09-01",
-    engineLH: "E946019 · 2029.4 FH",
-    engineRH: "E946014 · 2000.0 FH",
-    estFleiAt6000: 0.42,
-    estYearFlei: 2032,
-    estAfhFlei: 11900,
-    strainGaugeStatus: "Warning — scheduled for replacement",
-    ncrdTotal: 25,
-    ncrdIncorporated: 20,
-    ncrdOnHold: 5,
-    ncrdSurfaceDefects: 50,
-    notes: "Currently under maintenance, showing higher FLEI values.",
-    activeEntry: "Black Line Entry: NCRD M4501/0004/2024 ACTIVE"
-  },
-];
+interface AircraftRecord {
+  id: number
+  tailId: string
+  totalAfh: number
+  afhPrevPeriod?: number
+  afhAnnualIncrement?: number
+  status: string
+  totalDefectsCum: number
+  defectsLatestCycle: number
+  corrosionsLatestCycle: number
+  lifePercentConsumed?: number
+  lpm12yCompleted: boolean
+  strainGaugeStatus?: string
+  slepLimitAfh?: number
+  engineLhSn?: string
+  engineLhAfh?: number
+  engineRhSn?: string
+  engineRhAfh?: number
+  yearsInService?: number
+  nextServicingPmi2?: string
+  lpm12yInductionAfh?: number
+  lpm12yDateIn?: string
+  lpm12yDateOut?: string
+  notes?: string
+  designLifeLimitAfh?: number
+  pwdYear?: number
+}
+
+interface FatigueRecord {
+  id: number
+  aircraftId: string
+  wrFleiCurrent?: number
+  wfFleiCurrent?: number
+  wrFleiAnnualDelta?: number
+  usageGradient?: number
+  estFleiAt6000Afh?: number
+  estYearFlei1?: number
+  estAfhAtFlei1?: number
+}
+
+interface DefectRecord {
+  id: number
+  ncrdRef: string
+  aircraftId: string
+  title: string
+  isBlackLineEntry: boolean
+}
 
 export default function FleetRegister() {
-  const [selectedRow, setSelectedRow] = useState<FleetRow | null>(null);
-  
+  const [aircraft, setAircraft] = useState<AircraftRecord[]>([])
+  const [fatigue, setFatigue] = useState<FatigueRecord[]>([])
+  const [defects, setDefects] = useState<DefectRecord[]>([])
+  const [loading, setLoading] = useState(true)
+  const [selectedRow, setSelectedRow] = useState<FleetRow | null>(null)
+
+  const fetchData = useCallback(async () => {
+    setLoading(true)
+    try {
+      const [acRes, fatRes, defRes] = await Promise.all([
+        fetch(`${API}/aircraft`),
+        fetch(`${API}/fatigue`),
+        fetch(`${API}/defects`),
+      ])
+      const acData: AircraftRecord[] = await acRes.json()
+      const fatData: FatigueRecord[] = await fatRes.json()
+      const defData: DefectRecord[] = await defRes.json()
+      
+      setAircraft(acData)
+      setFatigue(fatData)
+      setDefects(defData)
+    } catch (e) {
+      console.error("Failed to fetch fleet data:", e)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { void fetchData() }, [fetchData])
+
+  // Transform API data to FleetRow format
+  const fleetData: FleetRow[] = aircraft.map(ac => {
+    const fat = fatigue.find(f => f.aircraftId === ac.tailId)
+    const acDefects = defects.filter(d => d.aircraftId === ac.tailId)
+    const blackLine = acDefects.find(d => d.isBlackLineEntry)
+    
+    return {
+      tail: ac.tailId,
+      afh: ac.totalAfh,
+      deltaAnnual: ac.afhAnnualIncrement || 0,
+      wrFlei: fat?.wrFleiCurrent || 0,
+      wfFlei: fat?.wfFleiCurrent || 0,
+      lifePercent: ac.lifePercentConsumed || 0,
+      defectsTotal: ac.totalDefectsCum,
+      deltaLatest: ac.defectsLatestCycle,
+      corrosions: ac.corrosionsLatestCycle,
+      lpm12y: ac.lpm12yCompleted,
+      status: ac.status as "operational" | "maintenance",
+      afhPrev: ac.afhPrevPeriod,
+      designLifeLimit: ac.designLifeLimitAfh,
+      pwdYear: ac.pwdYear || undefined,
+      lpm12yInductionAFH: ac.lpm12yInductionAfh || undefined,
+      lpm12yDateIn: ac.lpm12yDateIn || undefined,
+      lpm12yDateOut: ac.lpm12yDateOut || undefined,
+      nextServicing: ac.nextServicingPmi2 || undefined,
+      engineLH: ac.engineLhSn ? `${ac.engineLhSn} · ${ac.engineLhAfh} FH` : undefined,
+      engineRH: ac.engineRhSn ? `${ac.engineRhSn} · ${ac.engineRhAfh} FH` : undefined,
+      estFleiAt6000: fat?.estFleiAt6000Afh || undefined,
+      estYearFlei: fat?.estYearFlei1 || undefined,
+      estAfhFlei: fat?.estAfhAtFlei1 || undefined,
+      strainGaugeStatus: ac.strainGaugeStatus || undefined,
+      ncrdTotal: acDefects.length || undefined,
+      ncrdIncorporated: acDefects.filter(d => !d.isBlackLineEntry).length || undefined,
+      ncrdOnHold: 0,
+      ncrdSurfaceDefects: ac.totalDefectsCum,
+      notes: ac.notes || undefined,
+      activeEntry: blackLine ? `${blackLine.ncrdRef} — ${blackLine.title} ACTIVE` : undefined,
+    }
+  })
+
+  const lpm12yTails = fleetData.filter(item => item.lpm12y).map(item => item.tail)
+
+  if (loading) {
+    return (
+      <AppShell>
+        <div className="flex items-center justify-center h-[70vh]">
+          <div className="h-12 w-12 rounded-full border-4 border-blue-500 border-t-transparent animate-spin" />
+        </div>
+      </AppShell>
+    )
+  }
+
   return (
     <AppShell>
       <div className="flex flex-col min-h-0">
@@ -226,7 +223,7 @@ export default function FleetRegister() {
               </TableHeader>
 
               <TableBody>
-                {dummyData.map((row) => (
+                {fleetData.map((row) => (
                   <TableRow
                     key={row.tail}
                     className={cn(
@@ -246,7 +243,7 @@ export default function FleetRegister() {
                         )}
                       </div>
                     </TableCell>
-                    <TableCell className="whitespace-nowrap truncate">{row.afh}</TableCell>
+                    <TableCell className="whitespace-nowrap truncate">{row.afh.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</TableCell>
                     <TableCell className="whitespace-nowrap truncate">
                       {(() => {
                         const { text, className } = formatAnnualDelta(row.deltaAnnual);
@@ -353,7 +350,7 @@ export default function FleetRegister() {
 
             {selectedRow && (
               <div className="space-y-0.5">
-          
+        
                 <div className="grid grid-cols-12 gap-4">
                   {/* Left column */}
                   <div className="col-span-6 md:col-span-6">
@@ -387,7 +384,7 @@ export default function FleetRegister() {
                         </div>
                       </div>
                     )}
-                      
+                       
                   </div>
                   {/* Right column */}
                   <div className="col-span-6 md:col-span-6">
@@ -462,7 +459,7 @@ export default function FleetRegister() {
                           </div>
                         )
                       })()}
-                        
+                          
                       {(() => {
                       const text = getCorrosionsTextClass(selectedRow.corrosions);
                       const border = getBorderFromTextClass(text);
@@ -473,7 +470,7 @@ export default function FleetRegister() {
                         </div>
                       );
                       })()}
-  
+   
                     </div>
                   </div>
                 </div>
@@ -698,7 +695,3 @@ function BottomKpi({
     </div>
   );
 }
-
-const lpm12yTails = dummyData
-  .filter(item => item.lpm12y)
-  .map(item => item.tail);

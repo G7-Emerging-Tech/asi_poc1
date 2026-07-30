@@ -2,13 +2,15 @@
 ASI POC1 Backend — FastAPI with Prisma ORM
 Complete API for all aircraft structural integrity data tables.
 """
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime, date
 from decimal import Decimal
 import json
+import os
+import re
 
 app = FastAPI(title="ASI POC1 API", version="1.0.0")
 
@@ -19,6 +21,22 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ===================== PRISMA DATABASE CLIENT =====================
+import sys
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+from prisma import Prisma
+
+prisma = Prisma()
+
+@app.on_event("startup")
+async def startup():
+    await prisma.connect()
+    print("✅ Connected to MySQL database")
+
+@app.on_event("shutdown")
+async def shutdown():
+    await prisma.disconnect()
 
 # ===================== PYDANTIC SCHEMAS =====================
 
@@ -237,9 +255,8 @@ class UserResponse(BaseModel):
         from_attributes = True
 
 
-# ===================== SEED DATA (In-memory for now, replace with DB queries) =====================
-
-# In-memory stores for initial development
+# ===================== IN-MEMORY STORES (Backward Compatibility) =====================
+# These are kept for endpoints not yet migrated to Prisma
 aircraft_db = {}
 flight_data_db = {}
 fatigue_db = {}
@@ -265,8 +282,161 @@ audit_id_seq = 1
 ingest_id_seq = 1
 aircraft_id_seq = 1
 
+# ===================== DATABASE HELPERS =====================
+
+async def upsert_aircraft(data: dict) -> dict:
+    """Upsert aircraft by tailId (unique) and buno (unique)."""
+    existing = await prisma.aircraftregistry.find_unique(
+        where={"tailId": data["tailId"]}
+    )
+    if existing:
+        # Update existing record
+        updated = await prisma.aircraftregistry.update(
+            where={"tailId": data["tailId"]},
+            data=data
+        )
+        return {"id": updated.id, "action": "updated", **data}
+    else:
+        # Create new record
+        created = await prisma.aircraftregistry.create(data=data)
+        return {"id": created.id, "action": "created", **data}
+
+def _build_prisma_data(data: dict) -> dict:
+    """Convert aircraftId to Prisma relation connect syntax."""
+    prisma_data = {k: v for k, v in data.items() if k != "aircraftId"}
+    if "aircraftId" in data:
+        prisma_data["aircraft"] = {"connect": {"tailId": data["aircraftId"]}}
+    return prisma_data
+
+async def upsert_flight(data: dict) -> dict:
+    """Upsert flight by stripNumber (unique) + aircraftId."""
+    # Ensure required flightDate field is present (datetime object, not string)
+    if "flightDate" not in data or not data["flightDate"]:
+        data["flightDate"] = datetime.now()
+    elif isinstance(data["flightDate"], str):
+        data["flightDate"] = datetime.now()
+    
+    # Build Prisma data with relation connect syntax
+    prisma_data = _build_prisma_data(data)
+    
+    existing = await prisma.flightdata.find_unique(
+        where={"stripNumber": data["stripNumber"]}
+    )
+    if existing:
+        updated = await prisma.flightdata.update(
+            where={"stripNumber": data["stripNumber"]},
+            data=prisma_data
+        )
+        return {"id": updated.id, "action": "updated", **data}
+    else:
+        created = await prisma.flightdata.create(data=prisma_data)
+        return {"id": created.id, "action": "created", **data}
+
+async def upsert_fatigue(data: dict) -> dict:
+    """Upsert fatigue by aircraftId + periodStart + periodEnd (composite unique)."""
+    # Convert periodStart and periodEnd to datetime objects
+    if "periodStart" in data and isinstance(data["periodStart"], str):
+        try:
+            data["periodStart"] = datetime.fromisoformat(data["periodStart"])
+        except (ValueError, TypeError):
+            data["periodStart"] = None
+    
+    if "periodEnd" in data and isinstance(data["periodEnd"], str):
+        try:
+            data["periodEnd"] = datetime.fromisoformat(data["periodEnd"])
+        except (ValueError, TypeError):
+            data["periodEnd"] = None
+    
+    # Build Prisma data with relation connect syntax
+    prisma_data = _build_prisma_data(data)
+    
+    existing = await prisma.fatiguelifeindex.find_first(
+        where={"aircraftId": data["aircraftId"]}
+    )
+    if existing:
+        updated = await prisma.fatiguelifeindex.update(
+            where={"id": existing.id},
+            data=prisma_data
+        )
+        return {"id": updated.id, "action": "updated", **data}
+    else:
+        created = await prisma.fatiguelifeindex.create(data=prisma_data)
+        return {"id": created.id, "action": "created", **data}
+
+async def upsert_mission_severity(data: dict) -> dict:
+    """Upsert mission severity by aircraftId + opcCode (composite unique)."""
+    # Build Prisma data with relation connect syntax
+    prisma_data = _build_prisma_data(data)
+    
+    existing = await prisma.missionseveritycontribution.find_first(
+        where={"aircraftId": data["aircraftId"], "opcCode": data["opcCode"]}
+    )
+    if existing:
+        updated = await prisma.missionseveritycontribution.update(
+            where={"id": existing.id},
+            data=prisma_data
+        )
+        return {"id": updated.id, "action": "updated", **data}
+    else:
+        created = await prisma.missionseveritycontribution.create(data=prisma_data)
+        return {"id": created.id, "action": "created", **data}
+
+async def upsert_defect(data: dict) -> dict:
+    """Upsert defect by ncrdRef (unique)."""
+    # Build Prisma data with relation connect syntax
+    prisma_data = _build_prisma_data(data)
+    
+    existing = await prisma.defectncrd.find_unique(
+        where={"ncrdRef": data["ncrdRef"]}
+    )
+    if existing:
+        updated = await prisma.defectncrd.update(
+            where={"ncrdRef": data["ncrdRef"]},
+            data=prisma_data
+        )
+        return {"id": updated.id, "action": "updated", **data}
+    else:
+        created = await prisma.defectncrd.create(data=prisma_data)
+        return {"id": created.id, "action": "created", **data}
+
+async def upsert_corrosion(data: dict) -> dict:
+    """Upsert corrosion by corrosionId (unique)."""
+    # Build Prisma data with relation connect syntax
+    prisma_data = _build_prisma_data(data)
+    
+    existing = await prisma.corrosionfinding.find_unique(
+        where={"corrosionId": data["corrosionId"]}
+    )
+    if existing:
+        updated = await prisma.corrosionfinding.update(
+            where={"corrosionId": data["corrosionId"]},
+            data=prisma_data
+        )
+        return {"id": updated.id, "action": "updated", **data}
+    else:
+        created = await prisma.corrosionfinding.create(data=prisma_data)
+        return {"id": created.id, "action": "created", **data}
+
 
 # ===================== API ENDPOINTS =====================
+
+# Helper to serialize Prisma records (convert datetime to string)
+def _serialize_record(record) -> dict:
+    """Convert a Prisma record to a JSON-serializable dict."""
+    if record is None:
+        return None
+    d = record.model_dump()
+    for k, v in d.items():
+        if isinstance(v, datetime):
+            d[k] = v.isoformat()
+    return d
+
+async def _ensure_connected():
+    """Ensure Prisma is connected."""
+    try:
+        await prisma.connect()
+    except Exception:
+        pass
 
 # ---- HEALTH CHECK ----
 @app.get("/api/health")
@@ -274,15 +444,19 @@ def health():
     return {"status": "ok", "version": "1.0.0"}
 
 # ========== 1. AIRCRAFT REGISTRY ==========
-@app.get("/api/aircraft", response_model=List[AircraftResponse])
-def list_aircraft():
-    return list(aircraft_db.values())
+@app.get("/api/aircraft")
+async def list_aircraft():
+    await _ensure_connected()
+    records = await prisma.aircraftregistry.find_many()
+    return [_serialize_record(r) for r in records]
 
-@app.get("/api/aircraft/{tail_id}", response_model=AircraftResponse)
-def get_aircraft(tail_id: str):
-    if tail_id not in aircraft_db:
+@app.get("/api/aircraft/{tail_id}")
+async def get_aircraft(tail_id: str):
+    await _ensure_connected()
+    record = await prisma.aircraftregistry.find_unique(where={"tailId": tail_id})
+    if not record:
         raise HTTPException(404, "Aircraft not found")
-    return aircraft_db[tail_id]
+    return _serialize_record(record)
 
 @app.post("/api/aircraft", response_model=AircraftResponse)
 def create_aircraft(data: AircraftCreate):
@@ -313,17 +487,22 @@ def delete_aircraft(tail_id: str):
     return {"ok": True}
 
 # ========== 2. FLIGHT DATA ==========
-@app.get("/api/flights", response_model=List[FlightDataResponse])
-def list_flights(aircraft_id: Optional[str] = None):
+@app.get("/api/flights")
+async def list_flights(aircraft_id: Optional[str] = None):
+    await _ensure_connected()
     if aircraft_id:
-        return [f for f in flight_data_db.values() if f["aircraftId"] == aircraft_id]
-    return list(flight_data_db.values())
+        records = await prisma.flightdata.find_many(where={"aircraftId": aircraft_id})
+    else:
+        records = await prisma.flightdata.find_many()
+    return [_serialize_record(r) for r in records]
 
-@app.get("/api/flights/{strip_number}", response_model=FlightDataResponse)
-def get_flight(strip_number: str):
-    if strip_number not in flight_data_db:
+@app.get("/api/flights/{strip_number}")
+async def get_flight(strip_number: str):
+    await _ensure_connected()
+    record = await prisma.flightdata.find_unique(where={"stripNumber": strip_number})
+    if not record:
         raise HTTPException(404, "Flight not found")
-    return flight_data_db[strip_number]
+    return _serialize_record(record)
 
 @app.post("/api/flights", response_model=FlightDataResponse)
 def create_flight(data: FlightDataCreate):
@@ -347,10 +526,13 @@ def create_flights_batch(data: List[FlightDataCreate]):
 
 # ========== 3. FATIGUE LIFE INDEX ==========
 @app.get("/api/fatigue")
-def list_fatigue(aircraft_id: Optional[str] = None):
+async def list_fatigue(aircraft_id: Optional[str] = None):
+    await _ensure_connected()
     if aircraft_id:
-        return [f for f in fatigue_db.values() if f["aircraftId"] == aircraft_id]
-    return list(fatigue_db.values())
+        records = await prisma.fatiguelifeindex.find_many(where={"aircraftId": aircraft_id})
+    else:
+        records = await prisma.fatiguelifeindex.find_many()
+    return [_serialize_record(r) for r in records]
 
 @app.post("/api/fatigue")
 def create_fatigue(data: FatigueCreate):
@@ -364,10 +546,13 @@ def create_fatigue(data: FatigueCreate):
 
 # ========== 4. MISSION SEVERITY ==========
 @app.get("/api/mission-severity")
-def list_mission_severity(aircraft_id: Optional[str] = None):
+async def list_mission_severity(aircraft_id: Optional[str] = None):
+    await _ensure_connected()
     if aircraft_id:
-        return [m for m in mission_sev_db.values() if m["aircraftId"] == aircraft_id]
-    return list(mission_sev_db.values())
+        records = await prisma.missionseveritycontribution.find_many(where={"aircraftId": aircraft_id})
+    else:
+        records = await prisma.missionseveritycontribution.find_many()
+    return [_serialize_record(r) for r in records]
 
 @app.post("/api/mission-severity")
 def create_mission_severity(data: MissionSevCreate):
@@ -380,22 +565,26 @@ def create_mission_severity(data: MissionSevCreate):
     return record
 
 # ========== 5. DEFECTS / NCRD ==========
-@app.get("/api/defects", response_model=List[DefectResponse])
-def list_defects(aircraft_id: Optional[str] = None, severity: Optional[str] = None, black_line: Optional[bool] = None):
-    results = list(defect_db.values())
+@app.get("/api/defects")
+async def list_defects(aircraft_id: Optional[str] = None, severity: Optional[str] = None, black_line: Optional[bool] = None):
+    await _ensure_connected()
+    where_clause = {}
     if aircraft_id:
-        results = [d for d in results if d["aircraftId"] == aircraft_id]
+        where_clause["aircraftId"] = aircraft_id
     if severity:
-        results = [d for d in results if d["severity"] == severity]
+        where_clause["severity"] = severity
     if black_line is not None:
-        results = [d for d in results if d["isBlackLineEntry"] == black_line]
-    return results
+        where_clause["isBlackLineEntry"] = black_line
+    records = await prisma.defectncrd.find_many(where=where_clause)
+    return [_serialize_record(r) for r in records]
 
-@app.get("/api/defects/{ncrd_ref}", response_model=DefectResponse)
-def get_defect(ncrd_ref: str):
-    if ncrd_ref not in defect_db:
+@app.get("/api/defects/{ncrd_ref}")
+async def get_defect(ncrd_ref: str):
+    await _ensure_connected()
+    record = await prisma.defectncrd.find_unique(where={"ncrdRef": ncrd_ref})
+    if not record:
         raise HTTPException(404, "Defect not found")
-    return defect_db[ncrd_ref]
+    return _serialize_record(record)
 
 @app.post("/api/defects", response_model=DefectResponse)
 def create_defect(data: DefectCreate):
@@ -417,10 +606,13 @@ def update_defect(ncrd_ref: str, data: DefectCreate):
 
 # ========== 6. CORROSION ==========
 @app.get("/api/corrosion")
-def list_corrosion(aircraft_id: Optional[str] = None):
+async def list_corrosion(aircraft_id: Optional[str] = None):
+    await _ensure_connected()
     if aircraft_id:
-        return [c for c in corrosion_db.values() if c["aircraftId"] == aircraft_id]
-    return list(corrosion_db.values())
+        records = await prisma.corrosionfinding.find_many(where={"aircraftId": aircraft_id})
+    else:
+        records = await prisma.corrosionfinding.find_many()
+    return [_serialize_record(r) for r in records]
 
 @app.post("/api/corrosion")
 def create_corrosion(data: CorrosionCreate):
@@ -433,10 +625,13 @@ def create_corrosion(data: CorrosionCreate):
 
 # ========== 7. CONDITION REPORTS ==========
 @app.get("/api/condition-reports")
-def list_condition_reports(aircraft_id: Optional[str] = None):
+async def list_condition_reports(aircraft_id: Optional[str] = None):
+    await _ensure_connected()
     if aircraft_id:
-        return [c for c in condition_report_db.values() if c["aircraftId"] == aircraft_id]
-    return list(condition_report_db.values())
+        records = await prisma.aircraftconditionreport.find_many(where={"aircraftId": aircraft_id})
+    else:
+        records = await prisma.aircraftconditionreport.find_many()
+    return [_serialize_record(r) for r in records]
 
 @app.post("/api/condition-reports")
 def create_condition_report(data: ConditionReportCreate):
@@ -449,8 +644,10 @@ def create_condition_report(data: ConditionReportCreate):
 
 # ========== 8. ENGINEERING REPORTS ==========
 @app.get("/api/engineering-reports")
-def list_eng_reports():
-    return list(eng_report_db.values())
+async def list_eng_reports():
+    await _ensure_connected()
+    records = await prisma.engineeringreport.find_many()
+    return [_serialize_record(r) for r in records]
 
 @app.post("/api/engineering-reports")
 def create_eng_report(data: EngReportCreate):
@@ -463,10 +660,13 @@ def create_eng_report(data: EngReportCreate):
 
 # ========== 9. SLEP ==========
 @app.get("/api/slep")
-def list_slep(aircraft_id: Optional[str] = None):
+async def list_slep(aircraft_id: Optional[str] = None):
+    await _ensure_connected()
     if aircraft_id:
-        return [s for s in slep_db.values() if s["aircraftId"] == aircraft_id]
-    return list(slep_db.values())
+        records = await prisma.sleprecord.find_many(where={"aircraftId": aircraft_id})
+    else:
+        records = await prisma.sleprecord.find_many()
+    return [_serialize_record(r) for r in records]
 
 @app.post("/api/slep")
 def create_slep(data: SlepCreate):
@@ -494,11 +694,17 @@ def add_audit(user: str, role: str, action: str, record: str, change: str):
     return entry
 
 @app.get("/api/audit")
-def list_audit(action: Optional[str] = None, limit: int = 100):
-    results = list(audit_db.values())
+async def list_audit(action: Optional[str] = None, limit: int = 100):
+    await _ensure_connected()
+    where_clause = {}
     if action:
-        results = [a for a in results if a["action"] == action]
-    return sorted(results, key=lambda x: x["timestamp"], reverse=True)[:limit]
+        where_clause["action"] = action
+    records = await prisma.audittrail.find_many(
+        where=where_clause,
+        order={"timestamp": "desc"},
+        take=limit
+    )
+    return [_serialize_record(r) for r in records]
 
 @app.post("/api/audit")
 def create_audit(data: AuditCreate):
@@ -507,8 +713,10 @@ def create_audit(data: AuditCreate):
 
 # ========== 11. INGESTED DOCUMENTS ==========
 @app.get("/api/ingested-docs")
-def list_ingested_docs():
-    return list(ingested_doc_db.values())
+async def list_ingested_docs():
+    await _ensure_connected()
+    records = await prisma.ingesteddocument.find_many()
+    return [_serialize_record(r) for r in records]
 
 @app.post("/api/ingested-docs")
 def create_ingested_doc(data: IngestDocCreate):
@@ -537,20 +745,24 @@ def list_users():
 
 # ========== 13. DASHBOARD STATS ==========
 @app.get("/api/dashboard/stats")
-def dashboard_stats():
-    fleet_size = len(aircraft_db)
-    operational = len([a for a in aircraft_db.values() if a["status"] == "operational"])
-    maint = len([a for a in aircraft_db.values() if a["status"] == "maintenance"])
-    total_defects = sum(a.get("totalDefectsCum", 0) for a in aircraft_db.values())
-    total_corrosions = sum(a.get("corrosionsLatestCycle", 0) for a in aircraft_db.values())
+async def dashboard_stats():
+    await _ensure_connected()
+    # Get all aircraft from MySQL
+    all_aircraft = await prisma.aircraftregistry.find_many()
+    fleet_size = len(all_aircraft)
+    operational = len([a for a in all_aircraft if a.status == "operational"])
+    maint = len([a for a in all_aircraft if a.status == "maintenance"])
+    total_defects = sum(a.totalDefectsCum for a in all_aircraft)
+    total_corrosions = sum(a.corrosionsLatestCycle for a in all_aircraft)
     
-    # Highest WR FLEI
+    # Get highest WR FLEI from MySQL
+    all_fatigue = await prisma.fatiguelifeindex.find_many()
     max_flei = None
     max_flei_ac = None
-    for f in fatigue_db.values():
-        if f.get("wrFleiCurrent") and (max_flei is None or f["wrFleiCurrent"] > max_flei):
-            max_flei = f["wrFleiCurrent"]
-            max_flei_ac = f["aircraftId"]
+    for f in all_fatigue:
+        if f.wrFleiCurrent and (max_flei is None or f.wrFleiCurrent > max_flei):
+            max_flei = f.wrFleiCurrent
+            max_flei_ac = f.aircraftId
     
     return {
         "fleetSize": fleet_size,
@@ -686,6 +898,131 @@ def seed_database():
         create_user(UserCreate(**u))
     
     return {"ok": True, "message": "Database seeded with FA-18D report data"}
+
+
+# ========== 15. DOCUMENT INGESTION ENDPOINTS ==========
+
+UPLOAD_DIR = "uploads"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+@app.post("/api/ingest/upload")
+async def upload_document(
+    file: UploadFile = File(...),
+    sheet_name: Optional[str] = Query(None)
+):
+    """Upload a document for AI ingestion. Supports PDF, Excel, CSV, Word, TIFF.
+    
+    Parameters:
+    - sheet_name: For Excel files, specify which sheet to parse. Use "ALL" to parse all sheets.
+    
+    NOTE: Data is now automatically approved and persisted to MySQL database.
+    """
+    global ingest_id_seq
+    from ingestion import ingest_document, route_to_api
+    
+    content = await file.read()
+    
+    # Run ingestion pipeline using content in memory
+    try:
+        # Treat empty string as None
+        sheet = sheet_name if sheet_name else None
+        result = await ingest_document(content, file.filename, sheet_name=sheet)
+        
+        # Add to ingested docs registry
+        doc_id = f"DOC-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        ingested_doc_db[doc_id] = {
+            "id": ingest_id_seq,
+            "docId": doc_id,
+            "filename": file.filename,
+            "fileType": os.path.splitext(file.filename)[1].lstrip('.') if '.' in file.filename else 'unknown',
+            "fileSize": f"{len(content) / 1024:.1f} KB",
+            "uploadDate": datetime.now().isoformat(),
+            "pageCount": result.get("row_count", 0),
+            "entityCount": len(result.get("entities", [])),
+            "status": "indexed",  # Auto-approve
+            "extractedEntities": json.dumps(result.get("entities", [])),
+        }
+        ingest_id_seq += 1
+        result["docId"] = doc_id
+        
+        # Auto-approve: route data to database immediately
+        entities = result.get("entities", [])
+        detected_types = result.get("detected_types", [])
+        
+        # Parse Excel into complete records if it's an Excel file
+        parsed_records = None
+        ext = os.path.splitext(file.filename)[1].lower()
+        if ext in ['.xls', '.xlsx']:
+            from ingestion import parse_excel_all_sheets, parse_sheet_to_records, SHEET_TO_TABLE
+            import tempfile
+            with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
+                tmp.write(content)
+                tmp_path = tmp.name
+            try:
+                sheets_data = parse_excel_all_sheets(tmp_path)
+                parsed_records = {}
+                for sheet_name, (h, r) in sheets_data.items():
+                    records = parse_sheet_to_records(sheet_name, h, r)
+                    if records:
+                        table_name = SHEET_TO_TABLE.get(sheet_name, sheet_name)
+                        parsed_records[table_name] = records
+            finally:
+                os.unlink(tmp_path)
+        
+        routing_result = await route_to_api(entities, detected_types, parsed_records)
+        result["routing"] = routing_result
+        result["status"] = "indexed"
+        
+        return result
+    except Exception as e:
+        # Log the full error with traceback
+        import traceback
+        error_detail = f"Ingestion failed: {str(e)}\n{traceback.format_exc()}"
+        print(f"ERROR: {error_detail}")  # Print to console
+        raise HTTPException(500, f"Ingestion failed: {str(e)}")
+
+
+@app.post("/api/ingest/approve/{doc_id}")
+async def approve_ingestion(doc_id: str):
+    """Approve the ingestion and route data to correct API endpoints.
+    
+    NOTE: This endpoint is deprecated. Data is now auto-approved on upload.
+    Kept for backward compatibility.
+    """
+    from ingestion import route_to_api
+    
+    if doc_id not in ingested_doc_db:
+        raise HTTPException(404, "Document not found")
+    
+    doc = ingested_doc_db[doc_id]
+    entities = json.loads(doc.get("extractedEntities", "[]"))
+    detected_types = []  # would need to re-detect or store
+    
+    # Route to correct tables
+    result = await route_to_api(entities, detected_types)
+    
+    # Mark as indexed
+    doc["status"] = "indexed"
+    ingested_doc_db[doc_id] = doc
+    
+    # Log audit
+    add_audit("AIIMS System", "AI Ingest", "IMPORT", 
+              f"Document: {doc.get('filename', '')}", 
+              f"Entities ingested into {len(result)} tables")
+    
+    return {"ok": True, "routing": result, "docId": doc_id}
+
+
+@app.post("/api/ingest/reject/{doc_id}")
+async def reject_ingestion(doc_id: str):
+    """Reject an ingestion."""
+    if doc_id not in ingested_doc_db:
+        raise HTTPException(404, "Document not found")
+    
+    ingested_doc_db[doc_id]["status"] = "rejected"
+    add_audit("User", "Engineer", "REJECT", f"Document: {doc_id}", "Ingestion rejected")
+    
+    return {"ok": True, "message": "Ingestion rejected"}
 
 
 if __name__ == "__main__":

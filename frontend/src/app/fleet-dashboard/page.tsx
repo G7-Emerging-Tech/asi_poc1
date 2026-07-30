@@ -1,55 +1,181 @@
 "use client"
 
+import { useEffect, useState, useCallback, useMemo } from "react"
+import { AppShell } from "@/components/app-shell"
 import { Button } from "@/components/ui/button"
 import { Square } from "lucide-react"
 import { Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 
-const COLORS = ["#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#3b82f6", "#f59e0b" ] // green, orange, red, purple, blue, yellow
+const COLORS = ["#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#3b82f6", "#f59e0b" ]
 
-{/* Placeholder data - replace with actual AFH data */}
-const AFHData = [
-  { ac: "AC-01", latestYear: 228.19, totalAFH: 5448.82 },
-  { ac: "AC-02", latestYear: 0, totalAFH: 5020.15 },
-  { ac: "AC-03", latestYear: 195.30, totalAFH: 4650.75 },
-  { ac: "AC-04", latestYear: 0, totalAFH: 4320.50 },
-  { ac: "AC-05", latestYear: 165.60, totalAFH: 3960.20 },
-  { ac: "AC-06", latestYear: 150.25, totalAFH: 3600.00 },
-  { ac: "AC-07", latestYear: 0, totalAFH: 4010.73 },
-  { ac: "AC-08", latestYear: 0, totalAFH: 3945.41 },
-]
+const API = "http://localhost:8000/api"
 
-{/* Placeholder alert data - replace with actual alerts */}
-const alertData = [
-  { id: 1, name: "AC-01 — Highest WR FLEI (0.4387) · Approaching PWD", description: "Annual increment 1.192E-02 · Reduce usage to extend life · Strain gauges replaced (resolved)", severity: "High" },
-  { id: 2, name: "ASDR Compliance Gap — 182 of 380 defects have ASDR", description: "All technicians to raise ASDR for every structural defect found", severity: "Medium" },
-  { id: 3, name: "AC-07 — 53 of 60 annual defects (LPMY12)", description: "7 corrosions · Critical structural anomalies across wing, tail, fuselage", severity: "High" },
-  { id: 4, name: "AC-03 & AC-04 have reduced life limits vs fleet", description: "AC-03: 5,134.2 hr · AC-04: 5,549.0 hr · SLEP available per Ref F", severity: "Low" },
-  { id: 5, name: "Strain Gauge Errors — AC-01, AC-02, AC-03 (Resolved)", description: "Strain Gauge Errors — AC-01, AC-02, AC-03 (Resolved)", severity: "Medium" },
-]
+interface AircraftRecord {
+  id: number
+  tailId: string
+  totalAfh: number
+  afhAnnualIncrement?: number
+  status: string
+  totalDefectsCum: number
+  defectsLatestCycle: number
+  corrosionsLatestCycle: number
+  strainGaugeStatus?: string
+  slepLimitAfh?: number
+}
 
-{/* Placeholder WRFLEI data - replace with actual FLEI calculations */}
-const wrfleiData = [
-  { ac: "AC-01", wrflei: 0.4387 },
-  { ac: "AC-02", wrflei: 0.3422 },
-  { ac: "AC-03", wrflei: 0.2985 },
-  { ac: "AC-04", wrflei: 0.3090 },
-  { ac: "AC-05", wrflei: 0.1900 },
-  { ac: "AC-06", wrflei: 0.2600 },
-  { ac: "AC-07", wrflei: 0.2550 },
-  { ac: "AC-08", wrflei: 0.2640 },
-]
+interface FatigueRecord {
+  id: number
+  aircraftId: string
+  wrFleiCurrent?: number
+  wrFleiAnnualDelta?: number
+}
 
-{/* Placeholder defect area data - replace with actual defect location data */}
-const defectAreaData = [
-  { area: "Wing", defects: 112 },
-  { area: "Aft Fuselage", defects: 76 },
-  { area: "Fwd Fuselage", defects: 6 },
-  { area: "Centre Fuselage", defects: 6 },
-]
+interface DefectRecord {
+  id: number
+  ncrdRef: string
+  aircraftId: string
+  title: string
+  location?: string
+  isBlackLineEntry: boolean
+}
+
+interface AlertItem {
+  id: number
+  name: string
+  description: string
+  severity: "High" | "Medium" | "Low"
+}
 
 export default function FleetDashboard() {
+  const [aircraft, setAircraft] = useState<AircraftRecord[]>([])
+  const [fatigue, setFatigue] = useState<FatigueRecord[]>([])
+  const [defects, setDefects] = useState<DefectRecord[]>([])
+  const [loading, setLoading] = useState(true)
+  const [stats, setStats] = useState<Record<string, unknown>>({})
+
+  const fetchData = useCallback(async () => {
+    setLoading(true)
+    try {
+      const [acRes, fatRes, defRes, statsRes] = await Promise.all([
+        fetch(`${API}/aircraft`),
+        fetch(`${API}/fatigue`),
+        fetch(`${API}/defects`),
+        fetch(`${API}/dashboard/stats`),
+      ])
+      const acData: AircraftRecord[] = await acRes.json()
+      const fatData: FatigueRecord[] = await fatRes.json()
+      const defData: DefectRecord[] = await defRes.json()
+      const statsData = await statsRes.json()
+      
+      setAircraft(acData)
+      setFatigue(fatData)
+      setDefects(defData)
+      setStats(statsData)
+    } catch (e) {
+      console.error("Failed to fetch dashboard data:", e)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { void fetchData() }, [fetchData])
+
+  // Compute alerts from data
+  const alerts: AlertItem[] = useMemo(() => {
+    const generatedAlerts: AlertItem[] = []
+    
+    const highFlei = fatigue
+      .filter(f => f.wrFleiCurrent && f.wrFleiCurrent >= 0.4)
+      .sort((a, b) => (b.wrFleiCurrent || 0) - (a.wrFleiCurrent || 0))
+    if (highFlei.length > 0) {
+      const top = highFlei[0]
+      generatedAlerts.push({
+        id: 1,
+        name: `${top.aircraftId} — Highest WR FLEI (${(top.wrFleiCurrent || 0).toFixed(4)}) · Approaching PWD`,
+        description: `Annual increment ${top.wrFleiAnnualDelta ? top.wrFleiAnnualDelta.toExponential(3) : "N/A"} · Reduce usage to extend life`,
+        severity: "High",
+      })
+    }
+
+    const blackLine = defects.filter(d => d.isBlackLineEntry)
+    if (blackLine.length > 0) {
+      generatedAlerts.push({
+        id: 2,
+        name: `${blackLine.length} Black Line Entries Active`,
+        description: blackLine.map(b => `${b.ncrdRef} — ${b.title}`).join("; "),
+        severity: "High",
+      })
+    }
+
+    const corrosionCount = aircraft.reduce((sum, a) => sum + (a.corrosionsLatestCycle || 0), 0)
+    if (corrosionCount > 0) {
+      generatedAlerts.push({
+        id: 3,
+        name: `${corrosionCount} corrosion findings (latest cycle)`,
+        description: "Review corrosion grades and schedule CPCP maintenance",
+        severity: "Medium",
+      })
+    }
+
+    const gaugeWarnings = aircraft.filter(a => 
+      a.strainGaugeStatus && a.strainGaugeStatus.toLowerCase().includes("warning")
+    )
+    if (gaugeWarnings.length > 0) {
+      generatedAlerts.push({
+        id: 4,
+        name: `Strain Gauge Warnings — ${gaugeWarnings.map(g => g.tailId).join(", ")}`,
+        description: "Scheduled for replacement",
+        severity: "Medium",
+      })
+    }
+
+    const slepCandidates = aircraft.filter(a => a.slepLimitAfh && a.slepLimitAfh < 6000)
+    if (slepCandidates.length > 0) {
+      generatedAlerts.push({
+        id: 5,
+        name: `${slepCandidates.map(s => `${s.tailId} (${s.slepLimitAfh} hr)`).join(", ")} have reduced life limits`,
+        description: "SLEP available per Ref F to extend operational service",
+        severity: "Low",
+      })
+    }
+
+    return generatedAlerts
+  }, [aircraft, fatigue, defects])
+
   const severityOrder: Record<string, number> = { High: 1, Medium: 2, Low: 3 };
-  const sortedAlerts = [...alertData].sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity]);
+  const sortedAlerts = [...alerts].sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity]);
+
+  const afhData = aircraft.map(a => ({
+    ac: a.tailId,
+    latestYear: a.afhAnnualIncrement || 0,
+    totalAFH: a.totalAfh || 0,
+  }))
+
+  const wrfleiData = fatigue.map(f => ({
+    ac: f.aircraftId,
+    wrflei: f.wrFleiCurrent || 0,
+  }))
+
+  const defectAreaMap: Record<string, number> = {}
+  defects.forEach(d => {
+    const loc = d.location || "Unknown"
+    const area = loc.includes("Wing") ? "Wing" :
+                 loc.includes("Fuselage") ? "Fuselage" :
+                 loc.includes("Tail") || loc.includes("Stabiliser") || loc.includes("Fin") ? "Tail/Stab" :
+                 loc.includes("Rib") || loc.includes("Spar") ? "Wing Structure" : "Other"
+    defectAreaMap[area] = (defectAreaMap[area] || 0) + 1
+  })
+  const defectAreaData = Object.entries(defectAreaMap).map(([area, defects]) => ({ area, defects }))
+
+  if (loading) {
+    return (
+      <AppShell>
+        <div className="flex items-center justify-center h-[70vh]">
+          <div className="h-12 w-12 rounded-full border-4 border-blue-500 border-t-transparent animate-spin" />
+        </div>
+      </AppShell>
+    )
+  }
 
   return (
     <div className="h-full w-full">
@@ -67,17 +193,16 @@ export default function FleetDashboard() {
         </div>
       </div>
 
-      {/* Placeholder content - replace with actual dashboard components */}
       <div className="grid grid-cols-4 gap-2 p-2">
         <div className="border border-gray-300 border-t-4 border-t-blue-500 rounded-md p-2">
           <div className="text-xs uppercase text-gray-500 font-semibold">
             fleet size
           </div>
           <div className="text-3xl text-blue-700 font-semibold items-center justify-center flex">
-            8
+            {stats?.fleetSize || aircraft.length}
           </div>
           <div className="text-[0.8rem] text-gray-500">
-            4 Operational · 2 Maint · 1 Restricted
+            {stats?.operational || 0} Operational · {stats?.maintenance || 0} Maint
           </div>
         </div>
         
@@ -86,10 +211,10 @@ export default function FleetDashboard() {
             total defects (fleet-wide)
           </div>
           <div className="text-3xl text-orange-700 font-semibold items-center justify-center flex">
-            380
+            {stats?.totalDefects || aircraft.reduce((s, a) => s + (a.totalDefectsCum || 0), 0)}
           </div>
           <div className="text-[0.8rem] text-gray-500">
-            Latest cycle: 60 · AC-07 (LPMY12)
+            Latest cycle: {aircraft.reduce((s, a) => s + (a.defectsLatestCycle || 0), 0)}
           </div>
         </div>
         
@@ -98,10 +223,13 @@ export default function FleetDashboard() {
             highest wr flei
           </div>
           <div className="text-3xl text-red-700 font-semibold items-center justify-center flex">
-            0.4387
+            {stats?.highestWrFlei ? Number(stats.highestWrFlei).toFixed(4) : "-"}
           </div>
           <div className="text-[0.8rem] text-gray-500">
-            AC-01 · Annual increment 1.192E-02
+            {stats?.highestWrFleiAircraft || "-"} · Annual increment {
+              fatigue.find(f => f.aircraftId === stats?.highestWrFleiAircraft)?.wrFleiAnnualDelta 
+                ?.toExponential(3) || "N/A"
+            }
           </div>
         </div>
         
@@ -110,10 +238,10 @@ export default function FleetDashboard() {
             corrosions (latest cycle)
           </div>
           <div className="text-3xl text-yellow-700 font-semibold items-center justify-center flex">
-            7
+            {stats?.totalCorrosions || aircraft.reduce((s, a) => s + (a.corrosionsLatestCycle || 0), 0)}
           </div>
           <div className="text-[0.8rem] text-gray-500">
-            All AC-07 · 1x Grade 4 critical
+            {aircraft.filter(a => a.corrosionsLatestCycle > 0).map(a => a.tailId).join(", ") || "-"}
           </div>
         </div>
         
@@ -122,10 +250,19 @@ export default function FleetDashboard() {
             annual & cumulative afh - fleet comparison
           </div>
           <div>
-            <AFHChart />
+            {afhData.length > 0 ? (
+              <AFHChart data={afhData} />
+            ) : (
+              <p className="text-xs text-muted-foreground py-8 text-center">No aircraft data available</p>
+            )}
           </div>
           <div className="text-[0.8rem] text-blue-700 bg-blue-500/10 p-2 rounded-lg">
-            AC-05 highest annual usage (357.95 hr) · AC-01 highest cumulative (5,448.82 hr) · AC-02/04/07/08 = 0 FH in 2023
+            {afhData.length > 0 ? (
+              <>
+                {afhData.sort((a, b) => b.latestYear - a.latestYear)[0]?.ac} highest annual usage ({afhData.sort((a, b) => b.latestYear - a.latestYear)[0]?.latestYear} hr) · 
+                {afhData.sort((a, b) => b.totalAFH - a.totalAFH)[0]?.ac} highest cumulative ({afhData.sort((a, b) => b.totalAFH - a.totalAFH)[0]?.totalAFH.toLocaleString()} hr)
+              </>
+            ) : "No data"}
           </div>
         </div>
         
@@ -134,19 +271,23 @@ export default function FleetDashboard() {
             active alerts - current findings
           </div>
           <div className="h-100 overflow-y-auto rounded-lg mt-2">
-            {sortedAlerts.map((alert) => {
-              let bgColor = "";
-              if (alert.severity === "High") bgColor = "bg-red-500/10 border-l-red-600";
-              else if (alert.severity === "Medium") bgColor = "bg-yellow-400/10 border-l-yellow-600";
-              else if (alert.severity === "Low") bgColor = "bg-blue-500/10 border-l-blue-600";
+            {sortedAlerts.length === 0 ? (
+              <p className="text-xs text-muted-foreground py-4 text-center">No active alerts</p>
+            ) : (
+              sortedAlerts.map((alert) => {
+                let bgColor = "";
+                if (alert.severity === "High") bgColor = "bg-red-500/10 border-l-red-600";
+                else if (alert.severity === "Medium") bgColor = "bg-yellow-400/10 border-l-yellow-600";
+                else if (alert.severity === "Low") bgColor = "bg-blue-500/10 border-l-blue-600";
 
-              return (
-                <div key={alert.id} className={`p-2 gap-2 mb-2 rounded-lg border-l-4 ${bgColor}`}>
-                  <div className="font-semibold text-sm">{alert.name}</div>
-                  <div className="text-xs text-gray-600">{alert.description}</div>
-                </div>
-              );
-            })}
+                return (
+                  <div key={alert.id} className={`p-2 gap-2 mb-2 rounded-lg border-l-4 ${bgColor}`}>
+                    <div className="font-semibold text-sm">{alert.name}</div>
+                    <div className="text-xs text-gray-600">{alert.description}</div>
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
         
@@ -155,10 +296,14 @@ export default function FleetDashboard() {
             wr flei accumulated - all aicraft
           </div>
           <div>
-            <WRFLEIChart />
+            {wrfleiData.length > 0 ? (
+              <WRFLEIChart data={wrfleiData} />
+            ) : (
+              <p className="text-xs text-muted-foreground py-8 text-center">No FLEI data available</p>
+            )}
           </div>
           <div className="text-[0.8rem] text-gray-500">
-            All fleet below OEM design curve · At 6,000 AFH, estimated FLEI ≈ 0.42–0.51 (limit = 1.0)
+            {wrfleiData.length > 0 ? "All fleet below OEM design curve" : "No data"}
           </div>
         </div>
         
@@ -167,10 +312,16 @@ export default function FleetDashboard() {
             fleet structural defects by area (cumulative)
           </div>
           <div>
-            <DefectAreaChart />
+            {defectAreaData.length > 0 ? (
+              <DefectAreaChart data={defectAreaData} />
+            ) : (
+              <p className="text-xs text-muted-foreground py-8 text-center">No defect data available</p>
+            )}
           </div>
           <div className="text-[0.8rem] p-2 text-gray-500">
-            Wing fairing = most repetitive location (62 defects, AFH interval 63.21 hr) · 56% of all defects in wing area
+            {defectAreaData.length > 0 ? (
+              `${defectAreaData.sort((a, b) => b.defects - a.defects)[0]?.area} = most repetitive location (${defectAreaData.sort((a, b) => b.defects - a.defects)[0]?.defects} defects)`
+            ) : "No data"}
           </div>
         </div>
       
@@ -179,35 +330,12 @@ export default function FleetDashboard() {
   )
 }
 
-  interface TooltipPayload {
-  value: number;
-  name?: string;
-  fill?: string;
-  dataKey?: string;
-  }
+interface AFHChartProps {
+  data: { ac: string; latestYear: number; totalAFH: number }[]
+}
 
-  function AFHCustomTooltip({ active, payload, label }: { active?: boolean; payload?: TooltipPayload[]; label?: string }) {
-    if (active && payload && payload.length) {
-      return (
-        <div className="bg-white p-2 border rounded shadow">
-          <p className="text-sm font-semibold">{`${label}`}</p>
-
-          <div className="flex items-center">
-            <Square strokeWidth={0} fill="#075af5"/>
-            <span className="text-sm text-gray-600">{`Latest Year AFH: ${payload[0].value.toLocaleString()}`}</span>
-          </div>
-          
-          <div className="flex items-center">
-            <Square strokeWidth={0} fill="#8fa9ee" />
-            <span className="text-sm text-gray-600">{`Total AFH: ${payload[1].value.toLocaleString()}`}</span>
-          </div>
-        </div>
-      );
-    }
-  }
-
-function AFHChart() {
-  const maxValue = Math.max(...AFHData.map(d => d.totalAFH));
+function AFHChart({ data }: AFHChartProps) {
+  const maxValue = Math.max(...data.map(d => d.totalAFH));
   const ticks = Array.from({ length: Math.ceil(maxValue / 1000) + 1}, (_, i) => i * 1000);
 
   return (
@@ -216,7 +344,7 @@ function AFHChart() {
         <BarChart
           width="100%"
           height="100%"
-          data={AFHData}
+          data={data}
           margin={{ top: 10, right: 10, left: 0, bottom: 5 }}
         >
           <CartesianGrid strokeDasharray="3 3" />
@@ -232,18 +360,80 @@ function AFHChart() {
   )
 }
 
+interface TooltipPayload {
+  value: number;
+  name?: string;
+  fill?: string;
+  dataKey?: string;
+}
+
+function AFHCustomTooltip({ active, payload, label }: { active?: boolean; payload?: TooltipPayload[]; label?: string }) {
+  if (active && payload && payload.length) {
+    return (
+      <div className="bg-white p-2 border rounded shadow">
+        <p className="text-sm font-semibold">{label}</p>
+
+        <div className="flex items-center">
+          <Square strokeWidth={0} fill="#075af5"/>
+          <span className="text-sm text-gray-600">{`Latest Year AFH: ${payload[0].value.toLocaleString()}`}</span>
+        </div>
+        
+        <div className="flex items-center">
+          <Square strokeWidth={0} fill="#8fa9ee" />
+          <span className="text-sm text-gray-600">{`Total AFH: ${payload[1].value.toLocaleString()}`}</span>
+        </div>
+      </div>
+    );
+  }
+  return null;
+}
+
+interface WRFLEIChartProps {
+  data: { ac: string; wrflei: number }[]
+}
+
+function WRFLEIChart({ data }: WRFLEIChartProps) {
+  return (
+    <div className="h-50 min-h-[120px] w-full text-xs">
+      <ResponsiveContainer aspect={0}>
+        <BarChart
+          width="100%"
+          height="100%"
+          data={data}
+          margin={{ top: 10, right: 10, left: 0, bottom: 5 }}
+        >
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis dataKey="ac" />
+          <YAxis width={40} tickFormatter={(value) => value.toFixed(2)} />
+          <Tooltip content={<WRLFEICustomTooltip />} />
+          <Bar dataKey="wrflei" name="WR FLEI">
+            {data.map((entry, index) => {
+              let color = "#10b981";
+              if (entry.wrflei >= 0.3 && entry.wrflei < 0.4) {
+                color = "#f59e0b";
+              } else if (entry.wrflei >= 0.4) {
+                color = "#ef4444";
+              }
+              return <Cell key={`cell-${index}`} fill={color} />;
+            })}  
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  )
+}
+
 function WRLFEICustomTooltip({ active, payload, label }: { active?: boolean; payload?: TooltipPayload[]; label?: string }) {
   if (active && payload && payload.length) {
     return (
       <div className="bg-white p-2 border rounded shadow">
         <p className="text-sm font-semibold">{label}</p>
         {payload.map((entry, index) => {
-          // Recompute color based on wrflei value
-          let color = "#10b981"; // green default
+          let color = "#10b981";
           if (entry.value >= 0.3 && entry.value < 0.4) {
-            color = "#f59e0b"; // orange
+            color = "#f59e0b";
           } else if (entry.value >= 0.4) {
-            color = "#ef4444"; // red
+            color = "#ef4444";
           }
           return (
             <div key={`item-${index}`} className="flex items-center space-x-2">
@@ -263,45 +453,18 @@ function WRLFEICustomTooltip({ active, payload, label }: { active?: boolean; pay
   return null;
 }
 
-function WRFLEIChart() {
-  return (
-    <div className="h-50 min-h-[120px] w-full text-xs">
-      <ResponsiveContainer aspect={0}>
-        <BarChart
-          width="100%"
-          height="100%"
-          data={wrfleiData}
-          margin={{ top: 10, right: 10, left: 0, bottom: 5 }}
-        >
-          <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="ac" />
-          <YAxis width={40} tickFormatter={(value) => value.toFixed(2)} />
-          <Tooltip content={<WRLFEICustomTooltip />} />
-          <Bar dataKey="wrflei" name="WR FLEI">
-            {wrfleiData.map((entry, index) => {
-              let color = "#10b981"; // default green
-              if (entry.wrflei >= 0.3 && entry.wrflei < 0.4) {
-                color = "#f59e0b"; // orange for moderate risk
-              } else if (entry.wrflei >= 0.4) {
-                color = "#ef4444"; // red for high risk
-              }
-              return <Cell key={`cell-${index}`} fill={color} />;
-            })}  
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
-  )
+interface DefectAreaChartProps {
+  data: { area: string; defects: number }[]
 }
 
-function DefectAreaChart() {
-  const total = defectAreaData.reduce((sum, d) => sum + d.defects, 0);
+function DefectAreaChart({ data }: DefectAreaChartProps) {
+  const total = data.reduce((sum, d) => sum + d.defects, 0);
   return (
     <div className="h-50 min-h-[120px] w-full text-xs">
       <ResponsiveContainer aspect={0}>
         <PieChart>
           <Pie
-            data={defectAreaData}
+            data={data}
             cx="50%"
             cy="50%"
             innerRadius={60}
@@ -309,7 +472,7 @@ function DefectAreaChart() {
             dataKey="defects"
             nameKey="area"
           >
-          {defectAreaData.map((entry, index) => (
+          {data.map((entry, index) => (
             <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
           ))}
           </Pie>

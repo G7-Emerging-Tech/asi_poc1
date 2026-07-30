@@ -31,6 +31,7 @@ type Props = {
   view: string;
   onAddPoint: (pos: THREE.Vector3) => void;
   onSelectPoint: (index: number, tooltipPosition: TooltipPosition) => void;
+  onPointsProjected?: (points: DamagePointLike[]) => void;
   selectedIndex: number | null;
   tooltip: { x: number; y: number; data: DamagePointLike } | null;
   points: DamagePointLike[];
@@ -38,7 +39,7 @@ type Props = {
 
 type ModelProps = {
   onAddPoint: (pos: THREE.Vector3) => void;
-  setModelRef: React.RefObject<THREE.Mesh | null>;
+  setModelRef: React.RefObject<THREE.Object3D | null>;
 };
 
 
@@ -90,6 +91,96 @@ type DamagePointsProps = {
   onSelectPoint: (index: number, tooltipPosition: TooltipPosition) => void;
 };
 
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function getRayDirectionForView(view: string, hint: THREE.Vector3) {
+  if (view === "TOP") return new THREE.Vector3(0, 1, 0);
+  if (view === "BOTTOM") return new THREE.Vector3(0, -1, 0);
+  if (view === "LEFT") return new THREE.Vector3(1, 0, 0);
+  if (view === "RIGHT") return new THREE.Vector3(-1, 0, 0);
+  if (view === "FRONT") return new THREE.Vector3(0, 0, 1);
+  if (view === "AFT") return new THREE.Vector3(0, 0, -1);
+
+  const absX = Math.abs(hint.x);
+  const absY = Math.abs(hint.y);
+  const absZ = Math.abs(hint.z);
+
+  if (absY >= absX && absY >= absZ) return new THREE.Vector3(0, Math.sign(hint.y || 1), 0);
+  if (absX >= absY && absX >= absZ) return new THREE.Vector3(Math.sign(hint.x || 1), 0, 0);
+  return new THREE.Vector3(0, 0, Math.sign(hint.z || 1));
+}
+
+function projectHintToModelSurface(point: DamagePointLike, model: THREE.Object3D) {
+  const box = new THREE.Box3().setFromObject(model);
+  const center = box.getCenter(new THREE.Vector3());
+  const size = box.getSize(new THREE.Vector3());
+  const maxDim = Math.max(size.x, size.y, size.z);
+
+  if (!Number.isFinite(maxDim) || maxDim === 0) return point.position;
+
+  const target = new THREE.Vector3(
+    center.x + clamp(point.position.x / 20, -0.45, 0.45) * size.x,
+    center.y + clamp(point.position.y / 12, -0.45, 0.45) * size.y,
+    center.z + clamp(point.position.z / 20, -0.45, 0.45) * size.z,
+  );
+
+  const primaryDirection = getRayDirectionForView(point.view, point.position).normalize();
+  const candidateDirections = [
+    primaryDirection,
+    new THREE.Vector3(0, 1, 0),
+    new THREE.Vector3(0, -1, 0),
+    new THREE.Vector3(1, 0, 0),
+    new THREE.Vector3(-1, 0, 0),
+    new THREE.Vector3(0, 0, 1),
+    new THREE.Vector3(0, 0, -1),
+  ];
+
+  const raycaster = new THREE.Raycaster();
+
+  for (const direction of candidateDirections) {
+    const origin = target.clone().add(direction.clone().multiplyScalar(maxDim * 1.5));
+    raycaster.set(origin, direction.clone().multiplyScalar(-1).normalize());
+
+    const hits = raycaster.intersectObject(model, true);
+    const nearestHit = hits.find((hit) => hit.object.visible);
+
+    if (nearestHit) {
+      const normal = nearestHit.face?.normal
+        ?.clone()
+        .transformDirection(nearestHit.object.matrixWorld)
+        .normalize();
+
+      return nearestHit.point.clone().add((normal ?? direction).multiplyScalar(0.35));
+    }
+  }
+
+  return target;
+}
+
+type SurfaceProjectedPointsProps = {
+  modelRef: React.RefObject<THREE.Object3D | null>;
+  points: DamagePointLike[];
+  onPointsProjected?: (points: DamagePointLike[]) => void;
+};
+
+function SurfaceProjectedPoints({ modelRef, points, onPointsProjected }: SurfaceProjectedPointsProps) {
+  useEffect(() => {
+    if (!modelRef.current || !onPointsProjected || points.length === 0) return;
+
+    const projected = points.map((point) => ({
+      ...point,
+      position: projectHintToModelSurface(point, modelRef.current as THREE.Object3D),
+    }));
+
+    const changed = projected.some((point, index) => point.position.distanceTo(points[index].position) > 0.01);
+    if (changed) onPointsProjected(projected);
+  }, [modelRef, onPointsProjected, points]);
+
+  return null;
+}
+
 function getColor(s: string) {
   if (s === "red") return "red";
   if (s === "orange") return "orange";
@@ -122,7 +213,7 @@ function DamagePoints({ points, selectedIndex, onSelectPoint }: DamagePointsProp
             onSelectPoint(i, getTooltipPosition(p.position));
           }}
         >
-          <sphereGeometry args={[2, 16, 16]} />
+          <sphereGeometry args={[selectedIndex === i ? 1.45 : 1.05, 16, 16]} />
 
           <meshBasicMaterial
             color={getColor(p.severity)}
@@ -138,7 +229,7 @@ function DamagePoints({ points, selectedIndex, onSelectPoint }: DamagePointsProp
 
 type CameraControllerProps = {
   view: string;
-  modelRef: React.RefObject<THREE.Mesh | null>;
+  modelRef: React.RefObject<THREE.Object3D | null>;
   controlsRef: React.RefObject<OrbitControlsImpl | null>;
 };
 
@@ -201,11 +292,12 @@ export default function AircraftViewer({
   view,
   onAddPoint,
   onSelectPoint,
+  onPointsProjected,
   selectedIndex,
   tooltip,
   points,
 }: Props) {
-  const modelRef = useRef<THREE.Mesh | null>(null);
+  const modelRef = useRef<THREE.Object3D | null>(null);
   const controlsRef = useRef<OrbitControlsImpl | null>(null);
 
   return (
@@ -225,6 +317,12 @@ export default function AircraftViewer({
         <ZoomPanController controlsRef={controlsRef} />
 
         <Model onAddPoint={onAddPoint} setModelRef={modelRef} />
+
+        <SurfaceProjectedPoints
+          modelRef={modelRef}
+          points={points}
+          onPointsProjected={onPointsProjected}
+        />
 
         <DamagePoints points={points} selectedIndex={selectedIndex} onSelectPoint={onSelectPoint} />
 

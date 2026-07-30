@@ -18,7 +18,7 @@ export default function RootLayout({
       className="h-full antialiased"
       suppressHydrationWarning
     >
-        <body>
+        <body suppressHydrationWarning>
           <ThemeProvider
             attribute="class"
             defaultTheme="system"

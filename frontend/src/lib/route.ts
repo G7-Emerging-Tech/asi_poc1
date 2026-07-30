@@ -60,6 +60,11 @@ export const SIDEBAR_NAV = [
                 icon: AlertTriangle,
             },
             {
+                path: "/damage-mapping",
+                label: "Damage Mapping",
+                icon: Map,
+            },
+            {
                 path: "/slep",
                 label: "SLEP (Life Extension)",
                 icon: Wrench,

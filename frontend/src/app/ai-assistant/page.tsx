@@ -1,362 +1,276 @@
 "use client"
 
-import { useEffect, useState, useRef } from "react"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Card } from "@/components/ui/card"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useEffect, useState, useCallback } from "react"
 import { AppShell } from "@/components/app-shell"
+import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
+import { Send, User, Bot, Loader2 } from "lucide-react"
 
-type AIResponse = {
-  response: string
-  reference: string
+const API = "http://localhost:8000/api"
+
+type Message = {
+  id: string
+  role: "user" | "assistant"
+  content: string
+  timestamp: Date
 }
-export default function AIIMSAssistant() {
-  const [message, setMessage] = useState("")
+
+interface ChatRequest {
+  message: string
+  context?: string
+}
+
+interface ChatResponse {
+  response: string
+  sources?: string[]
+  confidence?: number
+}
+
+export default function AIAssistant() {
+  const [messages, setMessages] = useState<Message[]>([])
+  const [input, setInput] = useState("")
   const [loading, setLoading] = useState(false)
-
-  const sources = [
-    "Annual ASI Yearly Engineering Report",
-    "LPM12Y ACR — AC-08",
-    "LPM12Y ACR — AC-07",
-    "LPM12Y ACR — AC-02",
-    "LPM12Y ACR — AC-01",
-  ]
-
-  const guardrails = [
-    {
-      title: "No fabrication",
-      desc: "Values only from source",
-    },
-    {
-      title: "Source citation",
-      desc: "Every claim cites record",
-    },
-    {
-      title: "Verified mode",
-      desc: "Draft data flagged",
-    },
-    {
-      title: "Audit logging",
-      desc: "All queries recorded",
-    },
-  ]
-
-  const chips = [
-    "AC-08 LPM12Y report",
-    "AC-07 LPM12Y report",
-    "Fleet FLEI summary",
-  ]
-
-  const [messages, setMessages] = useState<
-    {
-      role: "user" | "assistant"
-      response: string
-      reference?: string
-    }[]
-  >([
-    {
-      role: "assistant",
-      response:
-        "Online. I have indexed 5 approved documents covering the full LPM12Y fleet programme (AC-01, AC-02, AC-07, AC-08) plus the Annual Structural Integrity Report.\nI answer from verified, approved source records only.",
-    },
+  const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([
+    "What is the current highest WR FLEI in the fleet?",
+    "How many black line entries are active?",
+    "What is the corrosion status of AC-01?",
+    "When is the next LPM12Y induction scheduled?",
+    "What is the total fleet AFH?",
   ])
 
-  const getAIResponse = (input: string): AIResponse => {
-    const text = input.toLowerCase()
-
-    // AC-08
-    if (
-      text.includes("ac-08") ||
-      text.includes("ac-08 lpm12y report")
-    ) {
-      return {
-        response: `
-      LPM12Y Aircraft Condition Report — AC-08
-      Document: G7GA/ENG/ACR/2026/[AC-08](R0) · Date: 27 March 2026
-      Aircraft: AC-08 · BUNO: 165221 · AFH at induction: 4,104.7 hr · Service: 29 years
-      Engine LH: GE-E946008 · 3,551.3 FH · Engine RH: GE-E946015 · 4,003.0 FH
-      AoG: 3 years (last flight 29 Jul 2020) · Induction: 1 Jul 2024 · Completion: 6 Mar 2026
-      Status after LPM12Y: MISSIONIZED
-      Task cards: 1,548 (Rev 8) · Same scope as AC-02
-      Surface Findings: 35 total · 0 major,35 minor(Cleanest surface in fleet)
-      ADR Structural: 219 total · 63 major · 156 minor
-      Highest Zone: Zone 9 — Aft Fuselage(59 defects, highest repair dispositions)
-      Rectifications: 146 repair, 73 replace
-      Cannibalized/not installed: 267 items (129 cannibalized, 138 not installed)
-      NCRDs: 44 total (highest in fleet) · 2 RUAG AG · 6 Local EO · 17 LSR · 1 Others · 18 SPD
-      FIRST IMPLEMENTATION: Supersonic Particle Deposition (SPD) — 18 NCRDs repaired using this new technique (high-velocity metal particle bonding — no heat input). First use for this aircraft type.
-      
-      3 Significant Structural Findings:
-      1. G7GA/NCRD/4508/0044 — Bulkhead Y557.500 heat damage (APU fire) · MC item · SBI + BLE issued
-      2. G7GA/NCRD/4508/0037 — LH Inner Wing Aft Spar cracks and gouges · MC item · Scallop repair + bushing · MOS 122.06 @ 7.5G
-      3. G7GA/NCRD/4508/0032 — Y470.5 RH Wing Lug gouging · FC (Fracture Critical) · RUAG AG · Safe Life 15,300 SFH
-      EWIS: Continuity findings on most FCS systems — all pass functional check
-      MLG: MLG from AC-02 (prev. overhauled AUS) · Trunnion+axle lever (LH+RH) → Rosebank Engineering
-      W&B: CAESE — 7 Jan 2026
-      `.trim(),
-
-        reference: `
-        📚 G7GA/ENG/ACR/2026/[AC-08](R0) - LPM12Y ACR (Approved 27 Mar 2026)
-      `.trim()
+  const fetchData = useCallback(async () => {
+    setLoading(true)
+    try {
+      // Load suggested questions from API
+      const res = await fetch(`${API}/ai-assistant/suggestions`)
+      if (res.ok) {
+        const data = await res.json()
+        if (data.suggestions && Array.isArray(data.suggestions)) {
+          setSuggestedQuestions(data.suggestions)
+        }
       }
+    } catch (e) {
+      console.error("Failed to fetch AI suggestions:", e)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { void fetchData() }, [fetchData])
+
+  const sendMessage = async (userMessage: string) => {
+    if (!userMessage.trim()) return
+
+    const userMsg: Message = {
+      id: Date.now().toString(),
+      role: "user",
+      content: userMessage,
+      timestamp: new Date(),
     }
 
-    // AC-07
-    if (
-      text.includes("ac-07") ||
-      text.includes("ac-07 lpm12y report")
-    ) {
-      return {
-        response: `
-      LPM12Y Condition Report — AC-07
-      Document: M45-07 Condition Report Presentation · Date: 28 May 2024
-      Aircraft: AC-07 · BUNO 165219 · AFH at induction: 4,142.5 hr · 25 years service
-      AoG period: ~3 years before induction · Handed over 2 Feb 2023
-      LPM12Y period: 2 Feb 2023 – 30 Apr 2024 · Next servicing: 2028
-      Task cards: 1,350 (Rev 6)
-      Special history: 2008 fire incident caused extensive heat damage to aft fuselage. Higher defect count than AC-01 attributed to this plus prolonged AoG.
-      Surface Findings: 68 total (3 major, 65 minor)
-      Highest zone: Aft Fuselage, Fins and Engine Bay (63 defects)
-      Structural ADR: ~263 total (32 major, 231 minor)
-      NCRDs: 36 total · 28 incorporated · 8 cancelled (BLE/asset transfer/replacement) · 0 awaiting
-      5 Significant NCRDs:
-      1. LH Inner Wing Intercostal Cracked — Repaired
-      2. Former Y664.50 Deformed (heat damage 2008) — Repaired via 3× EOs
-      3. Scratch at Forward Fuselage Skin — Repaired
-      4. Door 34L Lower Rib Gouge — Repaired
-      5. Corrosion on LH and RH Vertical Fin Caps (G7GA/NCRD/M4507/0030 + 0031) — 2× BLACK LINE ENTRIES
-      EWIS: 7 continuity findings (NLG) · 3 intermittence (stabilators) · all pass functional check
-      MLG: Overhauled at depot
-      Fuel Tank No.2: Re-lifed from AC-01 (originally installed 1997), disbonded section at aft flange rectified · Rosebank Engineering re-life
-      LSRs created: 9 · EOs created: 3
-      vs AC-01: More defects due to 2008 fire and AoG, but fewer NCRDs (36 vs 39) due to LSR adoption
-      `.trim(),
-        reference: `
-        📚 M45-07 Condition Report Presentation - 39 slides · Approved 28 May 2024
-      `.trim()
-      }
-    }
-
-    // Fleet
-    if (text.includes("fleet")) {
-      return {
-        response: `
-      Fleet FLEI Summary — Current
-      All fleet below OEM design usage curve. At 6,000 AFH limit estimated max FLEI ≈ 0.50 — well below limit of 1.0. Estimated ultimate life (FLEI=1.0) ranges from 2043–2053 across fleet.
-      `.trim(),
-        reference: `
-      📚 Annual Structural Integrity Report — Sec 4 (approved)
-      `.trim()
-      }
-    }
-
-    return {
-      response: "No matching indexed data found.",
-      reference: "",
-    }
-  }
-
-  const sendMessage = async (text?: string) => {
-    const input = text || message
-
-    if (!input.trim()) return
-
-    // 1. add user message immediately
-    setMessages((prev) => [
-      ...prev,
-      {
-        role: "user",
-        response: input,
-      },
-    ])
-
-    setMessage("")
+    setMessages(prev => [...prev, userMsg])
+    setInput("")
     setLoading(true)
 
-    // 2. simulate "searching records"
-    await new Promise((res) => setTimeout(res, 800))
+    try {
+      const res = await fetch(`${API}/ai-assistant/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: userMessage } as ChatRequest),
+      })
 
-    const aiResponse = getAIResponse(input)
+      const data: ChatResponse = await res.json()
 
-    // 3. add assistant message
-    setMessages((prev) => [
-      ...prev,
-      {
+      const assistantMsg: Message = {
+        id: (Date.now() + 1).toString(),
         role: "assistant",
-        response: aiResponse.response,
-        reference: aiResponse.reference,
-      },
-    ])
+        content: data.response || "I apologize, but I couldn't process your request at this time.",
+        timestamp: new Date(),
+      }
 
-    setLoading(false)
+      setMessages(prev => [...prev, assistantMsg])
+    } catch (e) {
+      console.error("Failed to send message:", e)
+      const errorMsg: Message = {
+        id: (Date.now() + 1).toString(),
+        role: "assistant",
+        content: "I encountered an error processing your request. Please try again.",
+        timestamp: new Date(),
+      }
+      setMessages(prev => [...prev, errorMsg])
+    } finally {
+      setLoading(false)
+    }
   }
-  const handleChipClick = (chip: string) => {
-    sendMessage(chip)
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    sendMessage(input)
   }
-  const bottomRef = useRef<HTMLDivElement | null>(null)
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({
-      behavior: "smooth",
-    })
-  }, [messages])
+
+  const handleSuggestedQuestion = (question: string) => {
+    sendMessage(question)
+  }
 
   return (
     <AppShell>
+      <div className="h-full w-full flex flex-col">
+        {/* Header */}
+        <div className="p-6 border-b">
+          <h2 className="text-2xl font-bold">AI Assistant</h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            Ask questions about fleet data, fatigue analysis, defects, and structural integrity
+          </p>
+        </div>
 
-      {/* MAIN AREA */}
-      <div className="flex flex-1 gap-4 p-2 overflow-hidden min-h-0">
-        {/* LEFT CHAT PANEL */}
-        <Card className="flex-[4] flex flex-col h-[calc(100vh-6rem)] overflow-hidden bg">            {/* HEADER */}
-          <div className="p-2 border-b flex items-center justify-between">
-            <div className="flex items-center gap-2 text-sm font-semibold">
-              <div className="w-2 h-2 rounded-full bg-green-500" />
-              AIIMS AI Assistant
-              <span className="text-muted-foreground text-[10px]">RAG · Verified data only</span>
-            </div>
-
-            <Select defaultValue="verified">
-              <SelectTrigger className="w-[140px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="verified">Verified only</SelectItem>
-                <SelectItem value="all">Include draft</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* CHAT AREA */}
-          <div className="flex-1 h-0 overflow-y-auto p-4">
-            <div className="space-y-3">
-
-              {messages.map((m, i) => (
-                <div
-                  key={i}
-                  className={getBubbleClass(m.response, m.role)}
-                >
-                  {/* RESPONSE */}
-                  <div className="whitespace-pre-line text-zinc-900 dark:text-zinc-100 ">
-                    {m.response}
+        {/* Chat Area */}
+        <div className="flex-1 flex overflow-hidden">
+          {/* Main Chat */}
+          <div className="flex-1 flex flex-col">
+            <ScrollArea className="flex-1 p-6">
+              {messages.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full space-y-4">
+                  <Bot className="h-12 w-12 text-muted-foreground" />
+                  <div className="text-center">
+                    <h3 className="text-lg font-semibold">How can I help you today?</h3>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Ask me anything about the F/A-18D fleet data
+                    </p>
                   </div>
 
-                  {/* REFERENCE */}
-                  {m.reference && (
-                    <div className="mt-3 border-t pt-2">
-                      <div className="text-[11px] text-blue-600 whitespace-pre-line">
-                        {m.reference}
+                  {/* Suggested Questions */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-w-2xl w-full mt-6">
+                    {suggestedQuestions.map((question, idx) => (
+                      <Card
+                        key={idx}
+                        className="p-3 cursor-pointer hover:bg-muted/50 transition-colors"
+                        onClick={() => handleSuggestedQuestion(question)}
+                      >
+                        <p className="text-xs text-left">{question}</p>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4 max-w-4xl mx-auto">
+                  {messages.map((msg) => (
+                    <div
+                      key={msg.id}
+                      className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                    >
+                      {msg.role === "assistant" && (
+                        <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0">
+                          <Bot className="h-5 w-5 text-white" />
+                        </div>
+                      )}
+
+                      <Card
+                        className={`p-4 max-w-[80%] ${
+                          msg.role === "user"
+                            ? "bg-blue-500 text-white"
+                            : "bg-muted"
+                        }`}
+                      >
+                        <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                        <p className={`text-xs mt-2 ${msg.role === "user" ? "text-blue-100" : "text-muted-foreground"}`}>
+                          {msg.timestamp.toLocaleTimeString()}
+                        </p>
+                      </Card>
+
+                      {msg.role === "user" && (
+                        <div className="w-8 h-8 rounded-full bg-gray-500 flex items-center justify-center flex-shrink-0">
+                          <User className="h-5 w-5 text-white" />
+                        </div>
+                      )}
+                    </div>
+                  ))}
+
+                  {loading && (
+                    <div className="flex gap-3 justify-start">
+                      <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0">
+                        <Bot className="h-5 w-5 text-white" />
                       </div>
+                      <Card className="p-4">
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                      </Card>
                     </div>
                   )}
                 </div>
-              ))}
-
-              {loading && (
-                <div className="flex items-center gap-2 rounded-xl p-3 border bg-muted/40 w-fit">
-                  <div className="h-4 w-4 rounded-full border-2 border-muted-foreground border-t-transparent animate-spin" />
-                  <span className="text-xs text-muted-foreground">
-                    Searching indexed records...
-                  </span>
-                </div>
               )}
-              <div ref={bottomRef} />
-            </div>
-          </div>
-          {/* QUICK CHIPS */}
-          <div className="px-3 py-2 border-t flex gap-2 flex-wrap">
-            {chips.map((c, i) => (
-              <Button
-                key={i}
-                variant="outline"
-                size="sm"
-                onClick={() => handleChipClick(c)}
-              >
-                {c}
-              </Button>
-            ))}
-          </div>
+            </ScrollArea>
 
-          {/* INPUT */}
-          <div className="p-3 border-t flex gap-2">
-            <Input
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              placeholder="Ask about FLEI, defects, corrosion, AFH..."
-              onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-            />
-            <Button
-              className="bg-blue-600 text-white"
-              onClick={() => sendMessage()}
-            >
-              Send
-            </Button>
-          </div>
-
-        </Card>
-
-        {/* RIGHT SIDEBAR */}
-        <div className="flex-[1] flex flex-col gap-4">
-
-          {/* SOURCES */}
-          <Card className="p-4">
-            <div className="text-xs font-semibold text-muted-foreground ">INDEXED SOURCES</div>
-
-            <div className="space-y-2">
-              {sources.map((s, i) => (
-                <div key={i} className="flex justify-between items-center">
-                  <span className="text-xs text-muted-foreground">{s}</span>
-                  <Badge className="bg-green-50 border border-green-300 text-green-600 rounded-xs">Approved</Badge>
-                </div>
-              ))}
-            </div>
-          </Card>
-
-          {/* GUARDRAILS */}
-          <Card className="p-4">
-            <div className="text-xs font-semibold text-muted-foreground ">GUARDRAILS ACTIVE</div>
-
-            <div className="space-y-2">
-              {guardrails.map((g, i) => (
-                <div
-                  key={i}
+            {/* Input Area */}
+            <div className="p-4 border-t">
+              <form onSubmit={handleSubmit} className="flex gap-2 max-w-4xl mx-auto">
+                <Input
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  placeholder="Ask a question about the fleet..."
+                  disabled={loading}
+                  className="flex-1"
+                />
+                <Button
+                  type="submit"
+                  disabled={loading || !input.trim()}
+                  className="bg-blue-600 hover:bg-blue-700"
                 >
-                  <div className="flex items-center gap-2 text-xs font-semibold">
-                    <span className="text-green-600">✓</span>
-                    {g.title}
-                  </div>
-
-                  <div className="ml-4  text-[11px] text-muted-foreground">
-                    {g.desc}
-                  </div>
-                </div>
-              ))}
+                  {loading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4" />
+                  )}
+                </Button>
+              </form>
             </div>
-          </Card>
+          </div>
 
+          {/* Sidebar - Context Info */}
+          <div className="w-80 border-l p-4 hidden lg:block">
+            <h3 className="text-sm font-semibold mb-3">Context</h3>
+            <Separator className="mb-3" />
+            
+            <div className="space-y-3 text-xs">
+              <div>
+                <p className="font-semibold text-muted-foreground">Fleet</p>
+                <p className="mt-1">F/A-18D Hornet</p>
+              </div>
+
+              <div>
+                <p className="font-semibold text-muted-foreground">Data Sources</p>
+                <ul className="mt-1 space-y-1 list-disc list-inside">
+                  <li>Aircraft Registry</li>
+                  <li>Fatigue Life Index</li>
+                  <li>Defect NCRD</li>
+                  <li>Corrosion Findings</li>
+                  <li>Flight Data</li>
+                </ul>
+              </div>
+
+              <div>
+                <p className="font-semibold text-muted-foreground">Capabilities</p>
+                <ul className="mt-1 space-y-1 list-disc list-inside">
+                  <li>FLEI analysis</li>
+                  <li>Defect queries</li>
+                  <li>Corrosion status</li>
+                  <li>AFH tracking</li>
+                  <li>Maintenance scheduling</li>
+                </ul>
+              </div>
+
+              <div>
+                <p className="font-semibold text-muted-foreground">Status</p>
+                <Badge variant="secondary" className="mt-1">
+                  Connected to API
+                </Badge>
+              </div>
+            </div>
+          </div>
         </div>
-
       </div>
     </AppShell>
   )
-}
-const getBubbleClass = (text: string, role: "user" | "assistant") => {
-  const length = text.length
-
-  const base =
-    "rounded-xl p-3 text-xs whitespace-pre-line leading-6 shadow-sm border break-words w-fit"
-
-  const sizeClass =
-    length < 80
-      ? "max-w-[80%]"
-      : length < 300
-        ? "max-w-[50%]"
-        : "max-w-[80%]"
-
-  if (role === "user") {
-    return `${base} ml-auto bg-blue-50 border-blue-200 text-zinc-900 dark:bg-zinc-900 ${sizeClass}`
-  }
-
-  return `${base} bg-background text-zinc-800 ${sizeClass}`
 }

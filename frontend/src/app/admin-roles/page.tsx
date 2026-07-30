@@ -1,730 +1,478 @@
 "use client"
 
+import { useEffect, useState, useCallback } from "react"
 import { AppShell } from "@/components/app-shell"
-import { useState } from "react"
-import { Pencil, Eye, EyeOff } from "lucide-react"
 import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from "@/components/ui/table"
-import { Checkbox } from "@/components/ui/checkbox"
 import { Card } from "@/components/ui/card"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Input } from "@/components/ui/input"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Label } from "@/components/ui/label"
+import { Input } from "@/components/ui/input"
 import {
-    Select,
-    SelectTrigger,
-    SelectValue,
-    SelectContent,
-    SelectItem,
-} from "@/components/ui/select"
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { UserPlus, Shield, Users } from "lucide-react"
 
-const roles = [
-    {
-        user: "ASI Manager",
-        role: "ASI Manager",
-        permission: "Full All permissions",
-    },
-    {
-        user: "ASI/ESI Engineer",
-        role: "ASI/ESI Engineer",
-        permission: "Create · Edit · Verify · Upload",
-    },
-    {
-        user: "Analyst",
-        role: "Analyst",
-        permission: "Create · Upload · View",
-    },
-    {
-        user: "Auditor",
-        role: "Auditor",
-        permission: "View · Export only",
-    },
-    {
-        user: "Admin",
-        role: "Admin",
-        permission: "Overwrite · All Permission",
-    },
-]
+const API = "http://localhost:8000/api"
 
-const permissionMatrix = [
-    {
-        role: "ASI Manager",
-        create: true,
-        edit: true,
-        verify: true,
-        approve: true,
-        export: true,
-        devs: true,
-    },
-    {
-        role: "ASI/ESI Engineer",
-        create: true,
-        edit: true,
-        verify: true,
-        approve: false,
-        export: true,
-        devs: true,
-    },
-    {
-        role: "Analyst",
-        create: true,
-        edit: false,
-        verify: false,
-        approve: false,
-        export: true,
-        devs: true,
-    },
-    {
-        role: "Auditor",
-        create: false,
-        edit: false,
-        verify: false,
-        approve: false,
-        export: true,
-        devs: true,
-    },
-]
-
-const systemStatus = [
-    {
-        title: "System",
-        status: "Online",
-    },
-    {
-        title: "AI Assistant",
-        status: "Active",
-    },
-    {
-        title: "Document Index",
-        status: "5 documents indexed",
-    },
-    {
-        title: "Classification",
-        status: "RESTRICTED",
-    },
-    {
-        title: "Network",
-        status: "Secure / On-premises",
-    },
-    {
-        title: "Last Sync",
-        status: "Up to date",
-    },
-]
-
-const dummyUsers = [
-    { id: 1, name: "John Doe", email: "john@company.com", role: "Analyst", aircraft: "SUKHOI" },
-    { id: 2, name: "Sarah Lee", email: "sarah@company.com", role: "Auditor" },
-    { id: 3, name: "Mike Tan", email: "mike@company.com", role: "ASI/ESI Engineer", aircraft: "HERCULES" },
-]
-const roleOptions = [
-    "ASI Manager",
-    "ASI/ESI Engineer",
-    "Analyst",
-    "Auditor",
-    "Admin",
-]
-
-type User = {
-    id: number
-    name: string
-    email: string
-    role: string
-    password?: string
-    avatar?: string
-    aircraft?: string
+type UserType = {
+  id: number
+  username: string
+  email: string
+  role: "admin" | "engineer" | "viewer"
+  createdAt: string
 }
+
+type RoleType = {
+  name: string
+  description: string
+  permissions: string[]
+  userCount: number
+}
+
+interface UserRecord {
+  id: number
+  username: string
+  email: string
+  role: string
+  createdAt: string
+}
+
+interface RoleRecord {
+  name: string
+  description: string
+  permissions: string
+}
+
 export default function AdminRoles() {
-
-    const [users, setUsers] = useState<User[]>(dummyUsers)
-    const [search, setSearch] = useState("")
-    const [selected, setSelected] = useState<number[]>([])
-    const [editId, setEditId] = useState<number | null>(null)
-    const [showPassword, setShowPassword] = useState(false)
-    const [newPassword, setNewPassword] = useState("")
-    const [open, setOpen] = useState(false)
-
-    const [form, setForm] = useState({
-        name: "",
-        role: "",
-        password: "",
-        avatar: "",
-        aircraft: "",
-    })
-    const aircraftOptions = [
-        "HERCULES",
-        "BEECHCRAFT",
-        "BLACKHAWK",
-        "CN235",
-        "GLOBAL",
-        "HAWK",
-        "HORNET",
-        "PC7MKII",
-        "SUKHOI",
-        "A400M",
-    ]
-    const roleNeedsAircraft = [
-        "Analyst",
-        "ASI/ESI Engineer",
-    ]
-
-    return (
-        <AppShell>
-            <div className="p-6 space-y-4">
-                {/* Title */}
-                <div className="flex gap-4">
-
-                    <div className="w-7/10 lg:w-1/2">
-                        <h1 className="text-sm font-semibold">
-                            User Management
-                        </h1>
-                    </div>
-
-                    <div className="w-3/10 lg:w-1/2">
-                        <h2 className="text-sm font-semibold">
-                            System Status
-                        </h2>
-                    </div>
-
-                </div>
-                <div className="flex gap-4">
-                    {/* Left side */}
-                    <div className="w-7/10 lg:w-1/2 flex flex-col gap-4 min-w-0">
-                        {/* Top table */}
-                        <div className="overflow-hidden rounded-lg border border-gray-200 shadow-sm">
-                            <Table className="border rounded-lg overflow-hidden">
-                                <TableHeader className="bg-muted">
-                                    <TableRow>
-                                        <TableHead className="text-[10px] text-muted-foreground font-semibold">USER</TableHead>
-                                        <TableHead className="text-[10px] text-muted-foreground font-semibold">ROLE</TableHead>
-                                        <TableHead className="text-[10px] text-muted-foreground font-semibold">PERMISSION</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-
-                                <TableBody>
-                                    {roles.map((item) => (
-                                        <TableRow
-                                            key={item.user}
-                                            className="hover:bg-muted/50 transition"
-                                        >
-                                            <TableCell className="font-semibold text-xs">
-                                                {item.user}
-                                            </TableCell>
-
-                                            <TableCell>
-                                                <span
-                                                    className={`text-[11px] font-semibold px-2 py-1 rounded-md border ${getRoleStyle(item.role)}`}                                                >
-                                                    {item.role}
-                                                </span>
-                                            </TableCell>
-
-                                            <TableCell className="text-xs text-muted-foreground">
-                                                {item.permission}
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        </div>
-
-                        {/* Bottom table */}
-                        <div className="overflow-hidden rounded-xl border border-gray-200 shadow-sm flex-1 p-2">
-                            <p className="p-2 text-xs font-bold text-gray-500">
-                                RBAC PERMISSION MATRIX
-                            </p>
-                            <Table className="border rounded-lg overflow-hidden">
-                                <TableHeader className="bg-muted border-b-2">
-                                    <TableRow>
-                                        <TableHead className="text-[10px] text-muted-foreground font-semibold">ROLE</TableHead>
-                                        <TableHead className="text-[10px] text-muted-foreground font-semibold text-center">CREATE</TableHead>
-                                        <TableHead className="text-[10px] text-muted-foreground font-semibold text-center">EDIT</TableHead>
-                                        <TableHead className="text-[10px] text-muted-foreground font-semibold text-center">VERIFY</TableHead>
-                                        <TableHead className="text-[10px] text-muted-foreground font-semibold text-center">APPROVE</TableHead>
-                                        <TableHead className="text-[10px] text-muted-foreground font-semibold text-center">EXPORT</TableHead>
-                                        <TableHead className="text-[10px] text-muted-foreground font-semibold text-center">DEVS</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-
-                                <TableBody>
-                                    {permissionMatrix.map((item) => (
-                                        <TableRow
-                                            key={item.role}
-                                            className="hover:bg-muted/50 transition"
-                                        >
-                                            <TableCell className="font-semibold text-xs">
-                                                {item.role}
-                                            </TableCell>
-
-                                            {[item.create, item.edit, item.verify, item.approve, item.export, item.devs].map(
-                                                (value, i) => (
-                                                    <TableCell key={i} className="text-center text-xs font-semibold">
-                                                        {value ? (
-                                                            <span className="text-green-600">✓</span>
-                                                        ) : (
-                                                            <span className="text-muted-foreground">—</span>
-                                                        )}
-                                                    </TableCell>
-                                                )
-                                            )}
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        </div>
-                    </div>
-
-                    {/* Right container */}
-                    <div className="w-3/10 lg:w-1/2 lg:sticky lg:top-6 h-fit rounded-xl border border-gray-200 shadow-sm p-4">
-
-
-                        <div className="space-y-2">
-                            {systemStatus.map((item) => (
-                                <div
-                                    key={item.title}
-                                    className="flex items-start justify-between"
-                                >
-                                    <div className="flex flex-col">
-                                        <span className="font-bold text-xs">
-                                            {item.title}
-                                        </span>
-
-                                        <span className="text-muted-foreground text-[10px]">
-                                            {item.status}
-                                        </span>
-                                    </div>
-
-                                    <div
-                                        className={`p-2 rounded-sm border ${getSystemBoxColor(item.title)}`}
-                                    >
-                                        <div
-                                            className={`size-1 rounded-full ${getSystemDotColor(item.title)}`}
-                                        />
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-
-                </div>
-
-
-                {/* USER MANAGEMENT TABLE */}
-                <h2 className="font-bold">User Management (Admin Only)</h2>
-                <div className="mt-4 overflow-hidden rounded-xl border border-gray-200 shadow-sm">
-
-                    {/* TOP BAR */}
-                    <div className="flex items-center justify-between p-3 border-b bg-gray-50 dark:bg-gray-900">
-
-                        {/* SEARCH */}
-                        <input
-                            type="text"
-                            placeholder="Search user..."
-                            value={search}
-                            onChange={(e) => setSearch(e.target.value)}
-                            className="text-xs px-2 py-1 border rounded-md w-1/3"
-                        />
-
-                        <div className="flex gap-2">
-                            <button
-                                className="text-xs px-3 py-1 bg-blue-600 text-white rounded-md"
-                                onClick={() => {
-                                    setEditId(null)
-                                    setForm({ name: "", role: "", password: "", avatar: "", aircraft: "" })
-                                    setOpen(true)
-                                }}                            >
-                                + Add User
-                            </button>
-
-                            <button
-                                className="text-xs px-3 py-1 bg-red-600 text-white rounded-md"
-                                onClick={() => {
-                                    if (selected.length === 0) return
-
-                                    const confirmDelete = window.confirm(
-                                        `Are you sure you want to delete ${selected.length} user(s)? This action cannot be undone.`
-                                    )
-
-                                    if (!confirmDelete) return
-
-                                    setUsers(users.filter(u => !selected.includes(u.id)))
-                                    setSelected([])
-                                }}
-                            >
-                                Delete
-                            </button>
-                        </div>
-                    </div>
-
-
-                    {users
-                        .filter(u =>
-                            u.name.toLowerCase().includes(search.toLowerCase()) ||
-                            u.email.toLowerCase().includes(search.toLowerCase())
-                        )
-                        .map(user => (
-                            <Card key={user.id} className="p-3 flex items-start justify-between gap-4 relative rounded-none">
-
-                                {/* LEFT SIDE */}
-                                <div className="flex items-start gap-3">
-
-                                    <Checkbox
-                                        checked={selected.includes(user.id)}
-                                        onCheckedChange={(checked) => {
-                                            if (checked) {
-                                                setSelected([...selected, user.id])
-                                            } else {
-                                                setSelected(selected.filter(id => id !== user.id))
-                                            }
-                                        }}
-                                    />
-
-                                    {/* AVATAR */}
-                                    <Avatar className="h-9 w-9">
-                                        <AvatarFallback className="text-xs font-bold">
-                                            {user.name.charAt(0)}
-                                        </AvatarFallback>
-                                    </Avatar>
-
-                                    {/* INFO */}
-                                    <div className="flex flex-col gap-1">
-
-                                        <span className="text-[10px] px-2 py-0.5 w-fit rounded-full bg-green-100 text-green-700 border border-green-300">
-                                            Active
-                                        </span>
-
-                                        <span className="font-semibold text-xs">
-                                            {user.name}
-                                        </span>
-
-                                        <span className="text-[10px] text-gray-500">
-                                            Role: {user.role}
-                                        </span>
-
-                                        <span className="text-[10px] text-gray-400">
-                                            Password: ********
-                                        </span>
-                                        {roleNeedsAircraft.includes(user.role) && (
-                                            <span className="text-[10px] text-gray-500">
-                                                Aircraft: {user.aircraft}
-                                            </span>
-                                        )}
-
-                                    </div>
-                                </div>
-
-                                {/* EDIT BUTTON */}
-                                <button
-                                    onClick={() => {
-                                        setEditId(user.id)
-                                        setForm({
-                                            name: user.name,
-                                            role: user.role,
-                                            password: "",
-                                            avatar: user.avatar || "",
-                                            aircraft: user.aircraft || "",
-                                        })
-                                        setOpen(true)
-                                    }}
-                                    className="absolute top-2 right-2 p-1 text-blue-600 hover:bg-blue-100 rounded-md"
-                                >
-                                    <Pencil className="w-3.5 h-3.5" />
-                                </button>
-
-                            </Card>
-                        ))}
-
-                </div>
-            </div>
-            {open && (
-                <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-
-                    <div className="w-full max-w-md bg-white dark:bg-gray-900 rounded-lg p-4">
-
-                        {/* HEADER */}
-                        <div className="flex justify-between items-center mb-3">
-                            <h2 className="font-semibold text-sm">
-                                {editId ? "Edit User" : "Add User"}
-                            </h2>
-
-                            <button
-                                className="text-xs text-gray-500"
-                                onClick={() => setOpen(false)}
-                            >
-                                ✕
-                            </button>
-                        </div>
-
-                        {/* CARD */}
-                        <div className="flex gap-4 items-start">
-
-                            {/* AVATAR + UPLOAD */}
-                            <div className="flex flex-col items-center gap-2">
-
-                                <div className="size-14 rounded-full bg-gray-200 overflow-hidden flex items-center justify-center text-xs font-bold">
-                                    {form.avatar ? (
-                                        <img
-                                            src={form.avatar}
-                                            alt="avatar"
-                                            className="w-full h-full object-cover"
-                                        />
-                                    ) : (
-                                        form.name?.charAt(0) || "U"
-                                    )}
-                                </div>
-
-                                <label className="text-[10px] px-2 py-1 bg-gray-100 text-black border rounded-md cursor-pointer hover:bg-gray-200">
-                                    Upload
-                                    <input
-                                        type="file"
-                                        accept="image/*"
-                                        className="hidden"
-                                        onChange={(e) => {
-                                            const file = e.target.files?.[0]
-                                            if (!file) return
-
-                                            const reader = new FileReader()
-                                            reader.onload = () => {
-                                                setForm({
-                                                    ...form,
-                                                    avatar: reader.result as string,
-                                                })
-                                            }
-                                            reader.readAsDataURL(file)
-                                        }}
-                                    />
-                                </label>
-                            </div>
-
-                            <div className="flex flex-col gap-2 flex-1">
-
-                                {/* USERNAME */}
-                                <div className="space-y-1">
-                                    <Label className="text-xs">Username</Label>
-                                    <Input
-                                        placeholder="Username"
-                                        className="text-xs"
-                                        value={form.name}
-                                        onChange={(e) =>
-                                            setForm({ ...form, name: e.target.value })
-                                        }
-                                    />
-                                </div>
-
-                                {/* ROLE */}
-                                <div className="space-y-1">
-                                    <Label className="text-xs">Role</Label>
-
-                                    <Select
-                                        value={form.role}
-                                        onValueChange={(value) =>
-                                            setForm({ ...form, role: value })
-                                        }
-                                    >
-                                        <SelectTrigger className="w-full text-xs">
-                                            <SelectValue placeholder="Select Role" />
-                                        </SelectTrigger>
-
-                                        <SelectContent>
-                                            {roleOptions.map((role) => (
-                                                <SelectItem key={role} value={role}>
-                                                    {role}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-
-                                {/* AIRCRAFT - Only show for Analyst and ASI/ESI Engineer */}
-                                {roleNeedsAircraft.includes(form.role) && (
-                                    <div className="space-y-1">
-                                        <Label className="text-xs">Aircraft</Label>
-                                        <Select
-                                            value={form.aircraft}
-                                            onValueChange={(value) =>
-                                                setForm({ ...form, aircraft: value })
-                                            }
-                                        >
-                                            <SelectTrigger className="w-full text-xs">
-                                                <SelectValue placeholder="Select Aircraft" />
-                                            </SelectTrigger>
-
-                                            <SelectContent>
-                                                {aircraftOptions.map((aircraft) => (
-                                                    <SelectItem key={aircraft} value={aircraft}>
-                                                        {aircraft}
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                )}
-
-                                {/* PASSWORD */}
-                                <div className="space-y-1 relative">
-                                    <Label className="text-xs">Password</Label>
-
-                                    <Input
-                                        placeholder="Password"
-                                        type={showPassword ? "text" : "password"}
-                                        className="text-xs pr-8"
-                                        value={form.password}
-                                        onChange={(e) =>
-                                            setForm({ ...form, password: e.target.value })
-                                        }
-                                    />
-
-                                    <button
-                                        type="button"
-                                        onClick={() => setShowPassword(!showPassword)}
-                                        className="absolute right-2 top-8 text-gray-500"
-                                    >
-                                        {showPassword ? (
-                                            <EyeOff className="w-4 h-4" />
-                                        ) : (
-                                            <Eye className="w-4 h-4" />
-                                        )}
-                                    </button>
-                                </div>
-
-                                {/* NEW PASSWORD */}
-                                {editId && (
-                                    <div className="space-y-1 relative">
-                                        <Label className="text-xs">New Password</Label>
-
-                                        <Input
-                                            type={showPassword ? "text" : "password"}
-                                            className="text-xs pr-8"
-                                            value={newPassword}
-                                            onChange={(e) => setNewPassword(e.target.value)}
-                                        />
-
-                                        <button
-                                            type="button"
-                                            onClick={() => setShowPassword(!showPassword)}
-                                            className="absolute right-2 top-8 text-gray-500 text-xs"
-                                        >
-                                            {showPassword ? (
-                                                <EyeOff className="w-4 h-4" />
-                                            ) : (
-                                                <Eye className="w-4 h-4" />
-                                            )}                                        </button>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-
-                        {/* ACTIONS */}
-                        <div className="flex justify-end gap-2 pt-4">
-
-                            <button
-                                className="text-xs px-3 py-1 border rounded-md"
-                                onClick={() => setOpen(false)}
-                            >
-                                Cancel
-                            </button>
-
-                            <button
-                                className="text-xs px-3 py-1 bg-blue-600 text-white rounded-md"
-                                onClick={() => {
-                                    if (editId) {
-                                        setUsers(users.map(u =>
-                                            u.id === editId
-                                                ? {
-                                                    ...u,
-                                                    name: form.name,
-                                                    role: form.role,
-                                                    avatar: form.avatar,
-                                                    password: newPassword || form.password,
-                                                    aircraft: form.aircraft,
-                                                }
-                                                : u
-                                        ))
-                                    } else {
-                                        setUsers([
-                                            ...users,
-                                            {
-                                                id: Date.now(),
-                                                name: form.name,
-                                                role: form.role,
-                                                email: "",
-                                                avatar: form.avatar,
-                                                password: form.password,
-                                                aircraft: form.aircraft,
-                                            },
-                                        ])
-                                    }
-
-                                    setForm({ name: "", role: "", password: "", avatar: "", aircraft: "" })
-                                    setNewPassword("")
-                                    setShowPassword(false)
-                                    setEditId(null)
-
-                                    setOpen(false) 
-                                }}
-                            >
-                                {editId ? "Update" : "Save"}
-                            </button>
-
-                        </div>
-
-                    </div>
-                </div>
-            )}
-        </AppShell>
-
-    )
-}
-function getRoleStyle(role: string) {
+  const [users, setUsers] = useState<UserType[]>([])
+  const [roles, setRoles] = useState<RoleType[]>([])
+  const [loading, setLoading] = useState(true)
+  const [selectedUser, setSelectedUser] = useState<UserType | null>(null)
+  const [selectedRole, setSelectedRole] = useState<RoleType | null>(null)
+  const [searchTerm, setSearchTerm] = useState("")
+  const [filterRole, setFilterRole] = useState<string>("all")
+
+  const fetchData = useCallback(async () => {
+    setLoading(true)
+    try {
+      const [usersRes, rolesRes] = await Promise.all([
+        fetch(`${API}/users`),
+        fetch(`${API}/roles`),
+      ])
+      
+      const usersData: UserRecord[] = await usersRes.json()
+      const rolesData: RoleRecord[] = await rolesRes.json()
+      
+      const transformedUsers: UserType[] = usersData.map(record => ({
+        id: record.id,
+        username: record.username,
+        email: record.email,
+        role: record.role as "admin" | "engineer" | "viewer",
+        createdAt: record.createdAt,
+      }))
+      
+      const transformedRoles: RoleType[] = rolesData.map(record => ({
+        name: record.name,
+        description: record.description || "",
+        permissions: record.permissions ? JSON.parse(record.permissions) : [],
+        userCount: transformedUsers.filter(u => u.role === record.name).length,
+      }))
+      
+      setUsers(transformedUsers)
+      setRoles(transformedRoles)
+    } catch (e) {
+      console.error("Failed to fetch users and roles:", e)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { void fetchData() }, [fetchData])
+
+  // Filter users
+  const filteredUsers = users.filter(user => {
+    const matchesSearch = searchTerm === "" ||
+      user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      user.email.toLowerCase().includes(searchTerm.toLowerCase())
+    
+    const matchesRole = filterRole === "all" || user.role === filterRole
+    
+    return matchesSearch && matchesRole
+  })
+
+  const getRoleBadgeClass = (role: string) => {
     switch (role) {
-        case "ASI Manager":
-            return "text-red-800 bg-red-100 border border-red-400"
-
-        case "ASI/ESI Engineer":
-            return "text-blue-800 bg-blue-100 border border-blue-400"
-
-        case "Analyst":
-            return "text-green-800 bg-green-100 border border-green-400"
-
-        case "Auditor":
-            return "text-purple-800 bg-purple-100 border border-purple-400"
-
-        case "Admin":
-            return "text-yellow-800 bg-yellow-100 border border-yellow-400"
-
-        default:
-            return "text-gray-800 bg-gray-100 border border-gray-400"
+      case "admin": return "bg-red-100 text-red-700 border border-red-300"
+      case "engineer": return "bg-blue-100 text-blue-700 border border-blue-300"
+      case "viewer": return "bg-gray-100 text-gray-700 border border-gray-300"
+      default: return "bg-gray-100 text-gray-700 border border-gray-300"
     }
-}
+  }
 
-function getSystemBoxColor(title: string) {
-    switch (title) {
-        case "Classification":
-            return "bg-red-100 border-red-300"
-
-        case "Network":
-            return "bg-blue-100 border-blue-300"
-
-        default:
-            return "bg-green-100 border-green-300"
+  const getRoleIcon = (role: string) => {
+    switch (role) {
+      case "admin": return "🔴"
+      case "engineer": return "🔵"
+      case "viewer": return "⚪"
+      default: return "⚪"
     }
-}
+  }
 
-function getSystemDotColor(title: string) {
-    switch (title) {
-        case "Classification":
-            return "bg-red-500"
-
-        case "Network":
-            return "bg-blue-500"
-
-        default:
-            return "bg-green-500"
+  const formatDate = (dateString: string) => {
+    try {
+      const date = new Date(dateString)
+      return date.toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "short",
+        day: "2-digit",
+      })
+    } catch {
+      return dateString
     }
+  }
+
+  if (loading) {
+    return (
+      <AppShell>
+        <div className="flex items-center justify-center h-[70vh]">
+          <div className="h-12 w-12 rounded-full border-4 border-blue-500 border-t-transparent animate-spin" />
+        </div>
+      </AppShell>
+    )
+  }
+
+  return (
+    <AppShell>
+      <div className="h-full w-full p-6 space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-bold">Admin & Roles</h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              Manage users, roles, and permissions
+            </p>
+          </div>
+          <Button
+            className="bg-blue-600 text-white hover:bg-blue-700"
+            size="sm"
+          >
+            <UserPlus className="h-4 w-4 mr-1" />
+            Add User
+          </Button>
+        </div>
+
+        {/* Stats */}
+        <div className="grid grid-cols-4 gap-4">
+          <Card className="p-4 border-t-3 border-blue-500">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-xs text-muted-foreground font-semibold">TOTAL USERS</div>
+                <div className="text-2xl font-bold text-blue-700 mt-1">{users.length}</div>
+              </div>
+              <Users className="h-8 w-8 text-blue-500" />
+            </div>
+          </Card>
+          <Card className="p-4 border-t-3 border-red-500">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-xs text-muted-foreground font-semibold">ADMINS</div>
+                <div className="text-2xl font-bold text-red-700 mt-1">
+                  {users.filter(u => u.role === "admin").length}
+                </div>
+              </div>
+              <Shield className="h-8 w-8 text-red-500" />
+            </div>
+          </Card>
+          <Card className="p-4 border-t-3 border-purple-500">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-xs text-muted-foreground font-semibold">ENGINEERS</div>
+                <div className="text-2xl font-bold text-purple-700 mt-1">
+                  {users.filter(u => u.role === "engineer").length}
+                </div>
+              </div>
+              <Shield className="h-8 w-8 text-purple-500" />
+            </div>
+          </Card>
+          <Card className="p-4 border-t-3 border-gray-500">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-xs text-muted-foreground font-semibold">VIEWERS</div>
+                <div className="text-2xl font-bold text-gray-700 mt-1">
+                  {users.filter(u => u.role === "viewer").length}
+                </div>
+              </div>
+              <Users className="h-8 w-8 text-gray-500" />
+            </div>
+          </Card>
+        </div>
+
+        {/* Tabs */}
+        <Tabs defaultValue="users" className="w-full">
+          <TabsList>
+            <TabsTrigger value="users">Users</TabsTrigger>
+            <TabsTrigger value="roles">Roles & Permissions</TabsTrigger>
+          </TabsList>
+
+          {/* Users Tab */}
+          <TabsContent value="users" className="space-y-4 mt-4">
+            {/* Filters */}
+            <Card className="p-4">
+              <div className="flex gap-3">
+                <div className="flex-1">
+                  <Input
+                    placeholder="Search users by username or email..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="max-w-md"
+                  />
+                </div>
+                
+                <Select value={filterRole} onValueChange={setFilterRole}>
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Filter by role" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Roles</SelectItem>
+                    <SelectItem value="admin">Admin</SelectItem>
+                    <SelectItem value="engineer">Engineer</SelectItem>
+                    <SelectItem value="viewer">Viewer</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </Card>
+
+            {/* Users Table */}
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader className="bg-muted">
+                  <TableRow>
+                    <TableHead className="text-[10px] text-muted-foreground font-semibold">
+                      USERNAME
+                    </TableHead>
+                    <TableHead className="text-[10px] text-muted-foreground font-semibold">
+                      EMAIL
+                    </TableHead>
+                    <TableHead className="text-[10px] text-muted-foreground font-semibold">
+                      ROLE
+                    </TableHead>
+                    <TableHead className="text-[10px] text-muted-foreground font-semibold">
+                      CREATED
+                    </TableHead>
+                    <TableHead className="text-[10px] text-muted-foreground font-semibold" />
+                  </TableRow>
+                </TableHeader>
+
+                <TableBody className="text-xs">
+                  {filteredUsers.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                        No users found
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    filteredUsers.map((user) => (
+                      <TableRow key={user.id} className="hover:bg-muted/50">
+                        <TableCell className="font-medium">
+                          <div className="flex items-center gap-2">
+                            <span>{getRoleIcon(user.role)}</span>
+                            {user.username}
+                          </div>
+                        </TableCell>
+                        <TableCell>{user.email}</TableCell>
+                        <TableCell>
+                          <Badge className={`text-xs ${getRoleBadgeClass(user.role)}`}>
+                            {user.role.toUpperCase()}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{formatDate(user.createdAt)}</TableCell>
+                        <TableCell>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-xs h-7"
+                            onClick={() => setSelectedUser(user)}
+                          >
+                            Edit
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </TabsContent>
+
+          {/* Roles Tab */}
+          <TabsContent value="roles" className="space-y-4 mt-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {roles.map((role) => (
+                <Card
+                  key={role.name}
+                  className="p-4 cursor-pointer hover:bg-muted/50 transition-colors"
+                  onClick={() => setSelectedRole(role)}
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-2xl">{getRoleIcon(role.name)}</span>
+                        <div>
+                          <h3 className="font-semibold text-sm">{role.name.toUpperCase()}</h3>
+                          <p className="text-xs text-muted-foreground">{role.description}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="text-xs text-muted-foreground font-semibold">
+                        PERMISSIONS ({role.permissions.length})
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {role.permissions.slice(0, 3).map((permission, idx) => (
+                          <Badge key={idx} variant="secondary" className="text-xs">
+                            {permission}
+                          </Badge>
+                        ))}
+                        {role.permissions.length > 3 && (
+                          <Badge variant="secondary" className="text-xs">
+                            +{role.permissions.length - 3} more
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="text-xs text-muted-foreground">
+                      {role.userCount} user{role.userCount !== 1 ? "s" : ""}
+                    </div>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          </TabsContent>
+        </Tabs>
+
+        {/* User Edit Dialog */}
+        <Dialog open={!!selectedUser} onOpenChange={() => setSelectedUser(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Edit User</DialogTitle>
+              <DialogDescription>
+                Manage user role and permissions
+              </DialogDescription>
+            </DialogHeader>
+
+            {selectedUser && (
+              <div className="space-y-4">
+                <div>
+                  <p className="text-xs text-muted-foreground font-semibold">Username</p>
+                  <p className="text-sm">{selectedUser.username}</p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-muted-foreground font-semibold">Email</p>
+                  <p className="text-sm">{selectedUser.email}</p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-muted-foreground font-semibold">Role</p>
+                  <Select defaultValue={selectedUser.role}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="admin">Admin</SelectItem>
+                      <SelectItem value="engineer">Engineer</SelectItem>
+                      <SelectItem value="viewer">Viewer</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex gap-2">
+                  <Button className="flex-1 bg-blue-600 text-white hover:bg-blue-700">
+                    Save Changes
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => setSelectedUser(null)}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Role Details Dialog */}
+        <Dialog open={!!selectedRole} onOpenChange={() => setSelectedRole(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Role Details</DialogTitle>
+              <DialogDescription>
+                View role permissions and assigned users
+              </DialogDescription>
+            </DialogHeader>
+
+            {selectedRole && (
+              <div className="space-y-4">
+                <div>
+                  <p className="text-xs text-muted-foreground font-semibold">Role Name</p>
+                  <p className="text-sm font-semibold">{selectedRole.name.toUpperCase()}</p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-muted-foreground font-semibold">Description</p>
+                  <p className="text-sm">{selectedRole.description}</p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-muted-foreground font-semibold mb-2">
+                    Permissions ({selectedRole.permissions.length})
+                  </p>
+                  <div className="space-y-1">
+                    {selectedRole.permissions.map((permission, idx) => (
+                      <div
+                        key={idx}
+                        className="text-xs p-2 bg-muted/30 rounded border"
+                      >
+                        {permission}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-xs text-muted-foreground font-semibold">
+                    Assigned Users: {selectedRole.userCount}
+                  </p>
+                </div>
+
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => setSelectedRole(null)}
+                >
+                  Close
+                </Button>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+      </div>
+    </AppShell>
+  )
 }

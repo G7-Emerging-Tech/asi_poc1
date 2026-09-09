@@ -29,6 +29,7 @@ app.add_middleware(
 import sys
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from prisma import Prisma
+import vector_store
 
 prisma = Prisma()
 
@@ -111,12 +112,14 @@ def _role_permission_matrix() -> list[dict]:
 @app.on_event("startup")
 async def startup():
     await prisma.connect()
+    await vector_store.connect()
     await ensure_admin_user()
-    print("✅ Connected to MySQL database")
+    print("✅ Connected to PostgreSQL database")
 
 @app.on_event("shutdown")
 async def shutdown():
     await prisma.disconnect()
+    await vector_store.disconnect()
 
 # ===================== PYDANTIC SCHEMAS =====================
 
@@ -1135,6 +1138,21 @@ async def upload_document(
         }
         ingest_id_seq += 1
         result["docId"] = doc_id
+
+        # Persist to Postgres too, so it shows up in GET /api/ingested-docs
+        # (the in-memory dict above is process-local and lost on restart).
+        await prisma.ingesteddocument.create(
+            data={
+                "docId": doc_id,
+                "filename": file.filename,
+                "fileType": ingested_doc_db[doc_id]["fileType"],
+                "fileSize": ingested_doc_db[doc_id]["fileSize"],
+                "pageCount": result.get("row_count", 0),
+                "entityCount": len(result.get("entities", [])),
+                "status": "indexed",
+                "extractedEntities": json.dumps(result.get("entities", [])),
+            }
+        )
         
         # Auto-approve: route data to database immediately
         entities = result.get("entities", [])
@@ -1214,6 +1232,105 @@ async def reject_ingestion(doc_id: str):
     add_audit("User", "Engineer", "REJECT", f"Document: {doc_id}", "Ingestion rejected")
     
     return {"ok": True, "message": "Ingestion rejected"}
+
+
+# ========== 16. RAG PIPELINE (semantic search over uploaded documents) ==========
+
+class RagQueryRequest(BaseModel):
+    query: str
+    top_k: int = 5
+
+
+@app.post("/api/rag/ingest")
+async def rag_ingest_document(file: UploadFile = File(...)):
+    """Chunk, embed, and index a document (Excel/CSV/PDF/Word/text) for semantic search."""
+    import tempfile
+    import rag_chunking
+    import embeddings as embeddings_module
+    from ingestion import parse_excel_all_sheets, parse_csv
+
+    content = await file.read()
+    ext = os.path.splitext(file.filename)[1].lower()
+    doc_id = f"DOC-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+
+    if ext in ['.xls', '.xlsx']:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
+            tmp.write(content)
+            tmp_path = tmp.name
+        try:
+            sheets_data = parse_excel_all_sheets(tmp_path)
+        finally:
+            os.unlink(tmp_path)
+        chunks = []
+        for sheet_name, (headers, rows) in sheets_data.items():
+            chunks.extend(rag_chunking.chunk_tabular(headers, rows, f"{file.filename} / {sheet_name}"))
+    elif ext == '.csv':
+        headers, rows = parse_csv(content.decode('utf-8', errors='ignore'))
+        chunks = rag_chunking.chunk_tabular(headers, rows, file.filename)
+    elif ext == '.pdf':
+        with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
+            tmp.write(content)
+            tmp_path = tmp.name
+        try:
+            text = rag_chunking.extract_pdf_text(tmp_path)
+        finally:
+            os.unlink(tmp_path)
+        chunks = rag_chunking.chunk_text(text)
+    elif ext in ['.doc', '.docx']:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
+            tmp.write(content)
+            tmp_path = tmp.name
+        try:
+            text = rag_chunking.extract_docx_text(tmp_path)
+        finally:
+            os.unlink(tmp_path)
+        chunks = rag_chunking.chunk_text(text)
+    elif ext == '.txt':
+        chunks = rag_chunking.chunk_text(content.decode('utf-8', errors='ignore'))
+    else:
+        raise HTTPException(400, f"Unsupported file type: {ext}")
+
+    if not chunks:
+        raise HTTPException(400, "No content could be extracted from this file")
+
+    await prisma.ingesteddocument.create(
+        data={
+            "docId": doc_id,
+            "filename": file.filename,
+            "fileType": ext.lstrip('.'),
+            "fileSize": f"{len(content) / 1024:.1f} KB",
+            "entityCount": len(chunks),
+            "status": "indexed",
+        }
+    )
+
+    for i, chunk in enumerate(chunks):
+        embedding = embeddings_module.embed_text(chunk)
+        metadata = rag_chunking.extract_row_metadata(chunk)
+        await vector_store.insert_chunk(
+            doc_id=doc_id,
+            chunk_index=i,
+            structured_content=chunk,
+            raw_metadata=metadata,
+            part_number=metadata["part_number"],
+            ata_chapter=metadata["ata_chapter"],
+            file_type=ext.lstrip('.'),
+            embedding=embedding,
+        )
+
+    return {"docId": doc_id, "filename": file.filename, "chunkCount": len(chunks)}
+
+
+@app.post("/api/rag/query")
+async def rag_query(body: RagQueryRequest):
+    """Hybrid (vector + full-text) search over ingested chunks, reranked for precision."""
+    import embeddings as embeddings_module
+    import reranker as reranker_module
+
+    query_embedding = embeddings_module.embed_text(body.query)
+    candidates = await vector_store.hybrid_search(body.query, query_embedding, top_k=50)
+    results = reranker_module.rerank(body.query, candidates, top_k=body.top_k)
+    return {"query": body.query, "results": results}
 
 
 if __name__ == "__main__":

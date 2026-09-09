@@ -10,6 +10,7 @@ import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 type DamagePointLike = {
   id: string;
   position: THREE.Vector3;
+  hint: THREE.Vector3;
   model: "SUKHOI" | "HORNET";
   view: string;
   severity: "green" | "yellow" | "orange" | "red";
@@ -28,6 +29,7 @@ type TooltipPosition = {
 };
 
 type Props = {
+  model: "SUKHOI" | "HORNET";
   view: string;
   onAddPoint: (pos: THREE.Vector3) => void;
   onSelectPoint: (index: number, tooltipPosition: TooltipPosition) => void;
@@ -38,8 +40,25 @@ type Props = {
 };
 
 type ModelProps = {
+  model: "SUKHOI" | "HORNET";
   onAddPoint: (pos: THREE.Vector3) => void;
   setModelRef: React.RefObject<THREE.Object3D | null>;
+};
+
+const MODEL_CONFIG: Record<
+  "SUKHOI" | "HORNET",
+  { path: string; scale: [number, number, number]; rotation: [number, number, number] }
+> = {
+  SUKHOI: {
+    path: "/aircraft/SU-30/source/what.glb",
+    scale: [6, 6, 6],
+    rotation: [0, Math.PI, 0],
+  },
+  HORNET: {
+    path: "/aircraft/Hornet/boeing_fa-18f_super_hornet_-_free.glb",
+    scale: [1.6, 1.6, 1.6],
+    rotation: [0, -Math.PI / 2, 0],
+  },
 };
 
 
@@ -64,14 +83,15 @@ function ZoomPanController({ controlsRef }: ZoomPanControllerProps) {
   return null;
 }
 
-function Model({ onAddPoint, setModelRef }: ModelProps) {
-  const gltf = useGLTF("/aircraft/SU-30/source/what.glb");
+function Model({ model, onAddPoint, setModelRef }: ModelProps) {
+  const config = MODEL_CONFIG[model];
+  const gltf = useGLTF(config.path);
 
   return (
     <primitive
         object={gltf.scene}
-        scale={[6, 6, 6]}           // size fix
-        rotation={[0, Math.PI, 0]}     // orientation fix
+        scale={config.scale}
+        rotation={config.rotation}
         ref={setModelRef}              // for raycasting
         onPointerDown={(e: ThreeEvent<PointerEvent>) => {
             e.stopPropagation();
@@ -86,14 +106,11 @@ function Model({ onAddPoint, setModelRef }: ModelProps) {
 }
 
 type DamagePointsProps = {
+  activeModel: "SUKHOI" | "HORNET";
   points: DamagePointLike[];
   selectedIndex: number | null;
   onSelectPoint: (index: number, tooltipPosition: TooltipPosition) => void;
 };
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, value));
-}
 
 function getRayDirectionForView(view: string, hint: THREE.Vector3) {
   if (view === "TOP") return new THREE.Vector3(0, 1, 0);
@@ -114,19 +131,17 @@ function getRayDirectionForView(view: string, hint: THREE.Vector3) {
 
 function projectHintToModelSurface(point: DamagePointLike, model: THREE.Object3D) {
   const box = new THREE.Box3().setFromObject(model);
-  const center = box.getCenter(new THREE.Vector3());
   const size = box.getSize(new THREE.Vector3());
   const maxDim = Math.max(size.x, size.y, size.z);
 
   if (!Number.isFinite(maxDim) || maxDim === 0) return point.position;
 
-  const target = new THREE.Vector3(
-    center.x + clamp(point.position.x / 20, -0.45, 0.45) * size.x,
-    center.y + clamp(point.position.y / 12, -0.45, 0.45) * size.y,
-    center.z + clamp(point.position.z / 20, -0.45, 0.45) * size.z,
-  );
+  // `hint` is now a real point captured directly on this model's surface
+  // (see aircraftZones.ts) — use it as-is as the raycast target, no more
+  // guessing a bounding-box-relative position from an arbitrary small number.
+  const target = point.hint.clone();
 
-  const primaryDirection = getRayDirectionForView(point.view, point.position).normalize();
+  const primaryDirection = getRayDirectionForView(point.view, point.hint).normalize();
   const candidateDirections = [
     primaryDirection,
     new THREE.Vector3(0, 1, 0),
@@ -160,23 +175,28 @@ function projectHintToModelSurface(point: DamagePointLike, model: THREE.Object3D
 }
 
 type SurfaceProjectedPointsProps = {
+  activeModel: "SUKHOI" | "HORNET";
   modelRef: React.RefObject<THREE.Object3D | null>;
   points: DamagePointLike[];
   onPointsProjected?: (points: DamagePointLike[]) => void;
 };
 
-function SurfaceProjectedPoints({ modelRef, points, onPointsProjected }: SurfaceProjectedPointsProps) {
+function SurfaceProjectedPoints({ activeModel, modelRef, points, onPointsProjected }: SurfaceProjectedPointsProps) {
   useEffect(() => {
     if (!modelRef.current || !onPointsProjected || points.length === 0) return;
 
-    const projected = points.map((point) => ({
-      ...point,
-      position: projectHintToModelSurface(point, modelRef.current as THREE.Object3D),
-    }));
+    // Only re-project points belonging to the currently loaded mesh — raycasting
+    // a point meant for the other aircraft model against this one is meaningless,
+    // and would otherwise overwrite its already-correct position for its own model.
+    const projected = points.map((point) =>
+      point.model === activeModel
+        ? { ...point, position: projectHintToModelSurface(point, modelRef.current as THREE.Object3D) }
+        : point
+    );
 
     const changed = projected.some((point, index) => point.position.distanceTo(points[index].position) > 0.01);
     if (changed) onPointsProjected(projected);
-  }, [modelRef, onPointsProjected, points]);
+  }, [activeModel, modelRef, onPointsProjected, points]);
 
   return null;
 }
@@ -188,7 +208,7 @@ function getColor(s: string) {
   return "green";
 }
 
-function DamagePoints({ points, selectedIndex, onSelectPoint }: DamagePointsProps) {
+function DamagePoints({ activeModel, points, selectedIndex, onSelectPoint }: DamagePointsProps) {
   const { camera, size } = useThree();
 
   const getTooltipPosition = (position: THREE.Vector3) => {
@@ -202,7 +222,9 @@ function DamagePoints({ points, selectedIndex, onSelectPoint }: DamagePointsProp
 
   return (
     <>
-      {points.map((p, i) => (
+      {points.map((p, i) => {
+        if (p.model !== activeModel) return null;
+        return (
         <mesh
           key={i}
           position={p.position}
@@ -221,19 +243,21 @@ function DamagePoints({ points, selectedIndex, onSelectPoint }: DamagePointsProp
             transparent
           />
         </mesh>
-      ))}
+        );
+      })}
     </>
   );
 }
 
 
 type CameraControllerProps = {
+  model: "SUKHOI" | "HORNET";
   view: string;
   modelRef: React.RefObject<THREE.Object3D | null>;
   controlsRef: React.RefObject<OrbitControlsImpl | null>;
 };
 
-function CameraController({ view, modelRef, controlsRef }: CameraControllerProps) {
+function CameraController({ model, view, modelRef, controlsRef }: CameraControllerProps) {
   const { camera } = useThree();
 
   useEffect(() => {
@@ -283,12 +307,13 @@ function CameraController({ view, modelRef, controlsRef }: CameraControllerProps
     controlsRef.current.update();
     }
     
-  }, [view, camera, modelRef, controlsRef]);
+  }, [model, view, camera, modelRef, controlsRef]);
 
   return null;
 }
 
 export default function AircraftViewer({
+  model,
   view,
   onAddPoint,
   onSelectPoint,
@@ -312,19 +337,20 @@ export default function AircraftViewer({
         <ambientLight />
         <pointLight position={[10, 10, 10]} />
 
-        <CameraController view={view} modelRef={modelRef} controlsRef={controlsRef} />
+        <CameraController model={model} view={view} modelRef={modelRef} controlsRef={controlsRef} />
 
         <ZoomPanController controlsRef={controlsRef} />
 
-        <Model onAddPoint={onAddPoint} setModelRef={modelRef} />
+        <Model key={model} model={model} onAddPoint={onAddPoint} setModelRef={modelRef} />
 
         <SurfaceProjectedPoints
+          activeModel={model}
           modelRef={modelRef}
           points={points}
           onPointsProjected={onPointsProjected}
         />
 
-        <DamagePoints points={points} selectedIndex={selectedIndex} onSelectPoint={onSelectPoint} />
+        <DamagePoints activeModel={model} points={points} selectedIndex={selectedIndex} onSelectPoint={onSelectPoint} />
 
         <OrbitControls
           ref={controlsRef}

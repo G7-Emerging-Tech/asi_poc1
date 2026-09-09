@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/dialog";
 import AircraftViewer from "@/components/aircraft-viewer";
 import * as THREE from "three";
+import { ZONE_CALIBRATION } from "@/lib/aircraftZones";
 
 const API = "http://localhost:8000/api";
 
@@ -44,6 +45,7 @@ type AircraftView = (typeof VIEWS)[number];
 type DamagePoint = {
   id: string;
   position: THREE.Vector3;
+  hint: THREE.Vector3;
   model: AircraftModel;
   view: AircraftView;
   severity: Severity;
@@ -60,67 +62,50 @@ type DamagePoint = {
 const VIEWS = ["TOP", "LEFT", "RIGHT", "BOTTOM", "FRONT", "AFT"] as const;
 
 /* LOCATION TO 3D POSITION MAPPING */
-function locationToPosition(location: string): { pos: THREE.Vector3; view: AircraftView } {
+// Coordinates come from ZONE_CALIBRATION (frontend/src/lib/aircraftZones.ts) - real points
+// captured on each model's actual mesh surface, not guessed. Keyword categorization below
+// is unchanged from before; only the target coordinate per bucket was fixed.
+function locationToPosition(location: string, model: AircraftModel): { pos: THREE.Vector3; view: AircraftView } {
   const loc = location.toLowerCase();
-  
-  // Default position (center of aircraft)
-  let pos = new THREE.Vector3(0, 0, 0);
-  let view: AircraftView = "TOP";
-  
+  const zones = ZONE_CALIBRATION[model];
+
   if (loc.includes("wing") && (loc.includes("rh") || loc.includes("right"))) {
-    pos = new THREE.Vector3(15, 0, 0);
-    view = "RIGHT";
+    return zones.wingRH;
   } else if (loc.includes("wing") && (loc.includes("lh") || loc.includes("left"))) {
-    pos = new THREE.Vector3(-15, 0, 0);
-    view = "LEFT";
+    return zones.wingLH;
   } else if (loc.includes("wing")) {
-    pos = new THREE.Vector3(15, 0, 0);
-    view = "TOP";
+    return zones.wingGeneric;
   } else if (loc.includes("fuselage") && loc.includes("forward")) {
-    pos = new THREE.Vector3(0, 0, 10);
-    view = "FRONT";
+    return zones.fuselageForward;
   } else if (loc.includes("fuselage") && loc.includes("aft")) {
-    pos = new THREE.Vector3(0, 0, -10);
-    view = "AFT";
+    return zones.fuselageAft;
   } else if (loc.includes("fuselage")) {
-    pos = new THREE.Vector3(0, 0, 5);
-    view = "LEFT";
+    return zones.fuselageGeneric;
   } else if (loc.includes("vertical") && loc.includes("tail")) {
-    pos = new THREE.Vector3(0, 10, -15);
-    view = "AFT";
+    return zones.verticalTail;
   } else if (loc.includes("horizontal") && loc.includes("stabil")) {
-    pos = new THREE.Vector3(10, 0, -15);
-    view = "AFT";
+    return zones.horizontalStabiliser;
   } else if (loc.includes("fin") && loc.includes("cap")) {
-    pos = new THREE.Vector3(0, 12, -15);
-    view = "AFT";
+    return zones.finCap;
   } else if (loc.includes("door")) {
-    pos = new THREE.Vector3(0, -3, 5);
-    view = "LEFT";
+    return zones.door;
   } else if (loc.includes("spar")) {
-    pos = new THREE.Vector3(10, 0, 0);
-    view = "TOP";
+    return zones.spar;
   } else if (loc.includes("rib")) {
-    pos = new THREE.Vector3(12, 0, 2);
-    view = "TOP";
+    return zones.rib;
   } else if (loc.includes("bulkhead")) {
-    pos = new THREE.Vector3(0, 0, -5);
-    view = "AFT";
+    return zones.bulkhead;
   } else if (loc.includes("former")) {
-    pos = new THREE.Vector3(0, 0, 8);
-    view = "FRONT";
+    return zones.former;
   } else if (loc.includes("longeron")) {
-    pos = new THREE.Vector3(0, 2, 5);
-    view = "LEFT";
+    return zones.longeron;
   } else if (loc.includes("pylon")) {
-    pos = new THREE.Vector3(15, -2, 0);
-    view = "RIGHT";
+    return zones.pylon;
   } else if (loc.includes("stabiliser") || loc.includes("stabilizer")) {
-    pos = new THREE.Vector3(10, 0, -15);
-    view = "AFT";
+    return zones.horizontalStabiliser;
   }
-  
-  return { pos, view };
+
+  return { pos: new THREE.Vector3(0, 0, 0), view: "TOP" };
 }
 
 /* SEVERITY MAPPING */
@@ -208,13 +193,14 @@ export default function Page() {
         // Convert defects to damage points
         for (const defect of defects) {
           const location = defect.location || "Unknown";
-          const { pos, view: damageView } = locationToPosition(location);
           const severity = mapSeverity(defect.severity || "minor");
           const acModel = mapAircraftModel(defect.aircraftId || "AC-01");
-          
+          const { pos, view: damageView } = locationToPosition(location, acModel);
+
           damagePoints.push({
             id: defect.ncrdRef || `DEF-${damagePoints.length}`,
-            position: pos,
+            position: pos.clone(),
+            hint: pos.clone(),
             model: acModel,
             view: damageView,
             severity: severity,
@@ -231,13 +217,14 @@ export default function Page() {
         // Convert corrosion to damage points
         for (const corr of corrosion) {
           const location = corr.location || "Unknown";
-          const { pos, view: damageView } = locationToPosition(location);
           const severity = mapSeverity(corr.grade || "minor");
           const acModel = mapAircraftModel(corr.aircraftId || "AC-01");
-          
+          const { pos, view: damageView } = locationToPosition(location, acModel);
+
           damagePoints.push({
             id: corr.corrosionId || `CORR-${damagePoints.length}`,
-            position: pos,
+            position: pos.clone(),
+            hint: pos.clone(),
             model: acModel,
             view: damageView,
             severity: severity,
@@ -325,6 +312,7 @@ export default function Page() {
         {/* THREE.js Viewer */}
         <div className="flex justify-center">
           <AircraftViewer
+            model={model}
             view={view}
             points={points}
             selectedIndex={selectedIndex}

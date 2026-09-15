@@ -1333,6 +1333,29 @@ async def rag_query(body: RagQueryRequest):
     return {"query": body.query, "results": results}
 
 
+class AiChatRequest(BaseModel):
+    message: str
+    tailId: Optional[str] = None
+
+
+@app.get("/api/ai-assistant/suggestions")
+async def ai_assistant_suggestions(tailId: Optional[str] = None):
+    """Suggested questions built from live fleet data, so they're always answerable."""
+    import ai_assistant
+
+    await _ensure_connected()
+    return {"suggestions": await ai_assistant.build_suggestions(prisma, tailId)}
+
+
+@app.post("/api/ai-assistant/chat")
+async def ai_assistant_chat(body: AiChatRequest):
+    """Answer a question grounded in fleet data and ingested documents, via local Ollama (gpt-oss:20b)."""
+    import ai_assistant
+
+    await _ensure_connected()
+    return await ai_assistant.answer(prisma, body.message, body.tailId)
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

@@ -17,11 +17,18 @@ type Message = {
   role: "user" | "assistant"
   content: string
   timestamp: Date
+  sources?: string[]
 }
 
 interface ChatRequest {
   message: string
   context?: string
+  tailId?: string
+}
+
+interface AircraftOption {
+  tailId: string
+  acType: string
 }
 
 interface ChatResponse {
@@ -41,12 +48,23 @@ export default function AIAssistant() {
     "When is the next LPM12Y induction scheduled?",
     "What is the total fleet AFH?",
   ])
+  const [aircraftList, setAircraftList] = useState<AircraftOption[]>([])
+  const [selectedTailId, setSelectedTailId] = useState<string>("")
 
-  const fetchData = useCallback(async () => {
+  useEffect(() => {
+    fetch(`${API}/aircraft`)
+      .then(res => res.ok ? res.json() : [])
+      .then((data: AircraftOption[]) => Array.isArray(data) && setAircraftList(data))
+      .catch(e => console.error("Failed to fetch aircraft list:", e))
+  }, [])
+
+  const fetchSuggestions = useCallback(async (tailId: string) => {
     setLoading(true)
     try {
-      // Load suggested questions from API
-      const res = await fetch(`${API}/ai-assistant/suggestions`)
+      const url = tailId
+        ? `${API}/ai-assistant/suggestions?tailId=${encodeURIComponent(tailId)}`
+        : `${API}/ai-assistant/suggestions`
+      const res = await fetch(url)
       if (res.ok) {
         const data = await res.json()
         if (data.suggestions && Array.isArray(data.suggestions)) {
@@ -60,7 +78,7 @@ export default function AIAssistant() {
     }
   }, [])
 
-  useEffect(() => { void fetchData() }, [fetchData])
+  useEffect(() => { void fetchSuggestions(selectedTailId) }, [fetchSuggestions, selectedTailId])
 
   const sendMessage = async (userMessage: string) => {
     if (!userMessage.trim()) return
@@ -80,7 +98,10 @@ export default function AIAssistant() {
       const res = await fetch(`${API}/ai-assistant/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: userMessage } as ChatRequest),
+        body: JSON.stringify({
+          message: userMessage,
+          tailId: selectedTailId || undefined,
+        } as ChatRequest),
       })
 
       const data: ChatResponse = await res.json()
@@ -90,6 +111,7 @@ export default function AIAssistant() {
         role: "assistant",
         content: data.response || "I apologize, but I couldn't process your request at this time.",
         timestamp: new Date(),
+        sources: data.sources,
       }
 
       setMessages(prev => [...prev, assistantMsg])
@@ -128,31 +150,18 @@ export default function AIAssistant() {
         </div>
 
         {/* Chat Area */}
-        <div className="flex-1 flex overflow-hidden">
+        <div className="flex-1 flex min-h-0 overflow-hidden">
           {/* Main Chat */}
-          <div className="flex-1 flex flex-col">
-            <ScrollArea className="flex-1 p-6">
+          <div className="flex-1 flex flex-col min-h-0">
+            <ScrollArea className="flex-1 min-h-0 p-6">
               {messages.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full space-y-4">
                   <Bot className="h-12 w-12 text-muted-foreground" />
                   <div className="text-center">
                     <h3 className="text-lg font-semibold">How can I help you today?</h3>
                     <p className="text-sm text-muted-foreground mt-1">
-                      Ask me anything about the F/A-18D fleet data
+                      Ask me anything about the F/A-18D fleet data, or pick a suggested question below
                     </p>
-                  </div>
-
-                  {/* Suggested Questions */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-w-2xl w-full mt-6">
-                    {suggestedQuestions.map((question, idx) => (
-                      <Card
-                        key={idx}
-                        className="p-3 cursor-pointer hover:bg-muted/50 transition-colors"
-                        onClick={() => handleSuggestedQuestion(question)}
-                      >
-                        <p className="text-xs text-left">{question}</p>
-                      </Card>
-                    ))}
                   </div>
                 </div>
               ) : (
@@ -176,6 +185,11 @@ export default function AIAssistant() {
                         }`}
                       >
                         <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                        {msg.sources && msg.sources.length > 0 && (
+                          <p className="text-xs mt-2 text-muted-foreground">
+                            Sources: {msg.sources.join(", ")}
+                          </p>
+                        )}
                         <p className={`text-xs mt-2 ${msg.role === "user" ? "text-blue-100" : "text-muted-foreground"}`}>
                           {msg.timestamp.toLocaleTimeString()}
                         </p>
@@ -203,8 +217,25 @@ export default function AIAssistant() {
               )}
             </ScrollArea>
 
+            {/* Suggested Questions - above the input box for quick access */}
+            <div className="px-4 pt-3 border-t">
+              <div className="max-w-4xl mx-auto flex flex-wrap gap-2">
+                {suggestedQuestions.map((question, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    disabled={loading}
+                    onClick={() => handleSuggestedQuestion(question)}
+                    className="text-xs px-3 py-1.5 rounded-full border bg-muted/50 hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {question}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* Input Area */}
-            <div className="p-4 border-t">
+            <div className="p-4 pt-3">
               <form onSubmit={handleSubmit} className="flex gap-2 max-w-4xl mx-auto">
                 <Input
                   value={input}
@@ -229,14 +260,25 @@ export default function AIAssistant() {
           </div>
 
           {/* Sidebar - Context Info */}
-          <div className="w-80 border-l p-4 hidden lg:block">
+          <div className="w-80 border-l p-4 hidden lg:block overflow-y-auto min-h-0">
             <h3 className="text-sm font-semibold mb-3">Context</h3>
             <Separator className="mb-3" />
             
             <div className="space-y-3 text-xs">
               <div>
-                <p className="font-semibold text-muted-foreground">Fleet</p>
-                <p className="mt-1">F/A-18D Hornet</p>
+                <p className="font-semibold text-muted-foreground">Fleet / Aircraft</p>
+                <select
+                  value={selectedTailId}
+                  onChange={(e) => setSelectedTailId(e.target.value)}
+                  className="mt-1 w-full rounded-md border bg-background px-2 py-1.5 text-xs"
+                >
+                  <option value="">All Aircraft (F/A-18D Fleet)</option>
+                  {aircraftList.map((a) => (
+                    <option key={a.tailId} value={a.tailId}>
+                      {a.tailId} — {a.acType}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div>
